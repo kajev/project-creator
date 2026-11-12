@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
-import { launchApp, pickFolder, shot, tempDir } from './launch'
+import { closeApp, launchApp, pickFolder, shot, tempDir } from './launch'
 
 const INTERESTS = 'command-line tools I would use myself'
 
@@ -64,7 +64,7 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   expect(sent).toContain('new to programming')
   expect(sent).toContain('6 hours')
 
-  await app.close()
+  await closeApp(app, win)
   await fake.close()
 })
 
@@ -94,7 +94,42 @@ test('with a key already stored, the key step is skipped; cancelling the folder 
   await expect(win.locator('.app-project')).toHaveText('task-tracker-cli')
   expect(fake.requests).toHaveLength(2)
 
-  await app.close()
+  await closeApp(app, win)
+  await fake.close()
+})
+
+test('leaving the screen while Claude is still writing stops the flow there', async () => {
+  const fake = await startFakeAnthropic({ delayMs: 1500 })
+  const { app, win } = await launchApp({ env: { ANTHROPIC_BASE_URL: fake.url } })
+  await win.evaluate((key) => window.api.ai.setKey(key), GOOD_KEY)
+  // Count how often the folder picker is asked for.
+  await app.evaluate(({ dialog }) => {
+    const state = globalThis as unknown as { pickerCalls: number }
+    state.pickerCalls = 0
+    dialog.showOpenDialog = async () => {
+      state.pickerCalls++
+      return { canceled: true, filePaths: [] }
+    }
+  })
+
+  await win.getByRole('button', { name: 'Start a new project' }).click()
+  await win.getByLabel('What do you want to build or learn?').fill(INTERESTS)
+  await win.getByRole('button', { name: 'Suggest three projects' }).click()
+  await win.locator('.proposal').first().getByRole('button', { name: 'Build this one' }).click()
+  await expect(win.getByRole('status')).toContainText('Writing the brief')
+
+  // Leave while the brief is still on its way.
+  await win.getByRole('button', { name: 'Back to start' }).click()
+  await expect(win.locator('.welcome-title')).toBeVisible()
+
+  // The brief arrives after that. Nothing may happen: no folder picker, no error, still on Welcome.
+  await expect.poll(() => fake.served, { timeout: 10_000 }).toBe(2)
+  await win.waitForTimeout(500)
+  expect(await app.evaluate(() => (globalThis as unknown as { pickerCalls: number }).pickerCalls)).toBe(0)
+  await expect(win.locator('.welcome-title')).toBeVisible()
+  await expect(win.getByRole('alert')).toHaveCount(0)
+
+  await closeApp(app, win)
   await fake.close()
 })
 
@@ -116,6 +151,6 @@ test('a rejected key shows the reason and asks for the key again', async () => {
   await win.getByRole('button', { name: 'Back to start' }).click()
   await expect(win.locator('.welcome-title')).toHaveText('Project Creator')
 
-  await app.close()
+  await closeApp(app, win)
   await fake.close()
 })

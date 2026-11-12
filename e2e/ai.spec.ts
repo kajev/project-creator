@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
+import { BAD_KEY, CUT_OFF, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, REFUSAL, startFakeAnthropic, WRONG_SHAPE } from './fake-anthropic'
 import { launchApp } from './launch'
 
 const INPUT = { interests: 'command-line tools I would use myself', level: 'some' as const, language: '', hours: 6 }
@@ -46,6 +46,33 @@ test('a rejected key gives a clear message and is forgotten', async () => {
   await app.close()
   await fake.close()
 })
+
+// Each of these replies has text that is not the JSON we asked for. The message must say what happened,
+// not report a JSON syntax error.
+const BAD_REPLIES = [
+  { word: CUT_OFF, how: 'is cut off', expected: 'The reply was cut off before it finished.' },
+  { word: REFUSAL, how: 'is a refusal', expected: 'Claude declined this request.' },
+  { word: WRONG_SHAPE, how: 'has the wrong shape', expected: "The reply wasn't in the expected format." }
+]
+for (const { word, how, expected } of BAD_REPLIES) {
+  test(`a reply that ${how} gets a message that says so`, async () => {
+    const fake = await startFakeAnthropic()
+    const { app, win } = await launchApp({ env: { ANTHROPIC_BASE_URL: fake.url } })
+    await win.evaluate((key) => window.api.ai.setKey(key), GOOD_KEY)
+
+    const error = await win.evaluate(
+      (input) => window.api.ai.proposeProjects(input).then(() => null, (e: Error) => e.message),
+      { ...INPUT, interests: `anything ${word}` }
+    )
+    expect(error).toContain(expected)
+    expect(error).not.toContain('JSON')
+    // The key is fine, so it is kept.
+    expect(await win.evaluate(() => window.api.ai.hasKey())).toBe(true)
+
+    await app.close()
+    await fake.close()
+  })
+}
 
 test('without a key, nothing is sent', async () => {
   const fake = await startFakeAnthropic()

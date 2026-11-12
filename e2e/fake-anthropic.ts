@@ -67,18 +67,31 @@ export interface FakeRequest {
 export interface FakeAnthropic {
   url: string
   requests: FakeRequest[]
+  /** How many replies have been fully sent. */
+  readonly served: number
   close(): Promise<void>
 }
 
-export async function startFakeAnthropic(): Promise<FakeAnthropic> {
+/**
+ * Put one of these words in the "What do you want to build" answer to get a reply that went wrong
+ * in that particular way.
+ */
+export const CUT_OFF = 'E2E_CUT_OFF'
+export const REFUSAL = 'E2E_REFUSAL'
+export const WRONG_SHAPE = 'E2E_WRONG_SHAPE'
+
+/** `delayMs` holds every reply back, to test what happens while the app is waiting. */
+export async function startFakeAnthropic(options: { delayMs?: number } = {}): Promise<FakeAnthropic> {
   const requests: FakeRequest[] = []
+  let served = 0
 
   const server = createServer(async (req, res) => {
     let raw = ''
     for await (const chunk of req) raw += chunk
+    if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs))
     const send = (status: number, payload: unknown): void => {
       res.writeHead(status, { 'content-type': 'application/json' })
-      res.end(JSON.stringify(payload))
+      res.end(JSON.stringify(payload), () => served++)
     }
 
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/messages')) {
@@ -95,18 +108,26 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
       return
     }
 
+    const reply = (text: string, stop_reason: string): void =>
+      send(200, {
+        id: 'msg_e2e',
+        type: 'message',
+        role: 'assistant',
+        model: body.model,
+        content: [{ type: 'text', text }],
+        stop_reason,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 }
+      })
+
+    const asked = JSON.stringify(body.messages)
+    if (asked.includes(CUT_OFF)) return reply('{"proposals": [{"title": "Task Tr', 'max_tokens')
+    if (asked.includes(REFUSAL)) return reply('I can not help with that.', 'refusal')
+    if (asked.includes(WRONG_SHAPE)) return reply('{"something": "else"}', 'end_turn')
+
     // The two calls differ in the shape they ask for, so answer by that.
     const wantsProposals = JSON.stringify(body.output_config ?? {}).includes('proposals')
-    send(200, {
-      id: 'msg_e2e',
-      type: 'message',
-      role: 'assistant',
-      model: body.model,
-      content: [{ type: 'text', text: JSON.stringify(wantsProposals ? { proposals: FAKE_PROPOSALS } : FAKE_BRIEF) }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: { input_tokens: 1, output_tokens: 1 }
-    })
+    reply(JSON.stringify(wantsProposals ? { proposals: FAKE_PROPOSALS } : FAKE_BRIEF), 'end_turn')
   })
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -115,6 +136,9 @@ export async function startFakeAnthropic(): Promise<FakeAnthropic> {
   return {
     url: `http://127.0.0.1:${port}`,
     requests,
+    get served() {
+      return served
+    },
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections()

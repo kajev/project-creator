@@ -71,20 +71,28 @@ async function ask<T>(system: string, user: string, schema: z.ZodType<T>): Promi
   const apiKey = await getKey()
   if (!apiKey) throw new Error('Add your Claude API key first.')
   const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 })
+  const format = zodOutputFormat(schema)
   try {
-    const message = await client.messages.parse({
+    // Not messages.parse: it parses the text before we can look at stop_reason, so a reply that was cut off or
+    // declined would surface as a JSON syntax error instead of saying what happened.
+    const message = await client.messages.create({
       model: MODEL,
       max_tokens: 16000,
       system,
       messages: [{ role: 'user', content: user }],
-      output_config: { effort: 'medium', format: zodOutputFormat(schema) }
+      output_config: { effort: 'medium', format }
     })
     if (message.stop_reason === 'refusal') {
       throw new Error('Claude declined this request. Try describing what you want differently.')
     }
     if (message.stop_reason === 'max_tokens') throw new Error('The reply was cut off before it finished. Try again.')
-    if (!message.parsed_output) throw new Error("The reply wasn't in the expected format. Try again.")
-    return message.parsed_output
+    const text = message.content.find((block) => block.type === 'text')
+    try {
+      if (!text) throw new Error('no text in the reply')
+      return format.parse(text.text)
+    } catch {
+      throw new Error("The reply wasn't in the expected format. Try again.")
+    }
   } catch (err) {
     throw await explain(err)
   }

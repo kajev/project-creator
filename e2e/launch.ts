@@ -1,4 +1,4 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,6 +24,20 @@ export async function launchApp(options: { userData?: string; env?: Record<strin
   })
   const win = await app.firstWindow()
   return { app, win, userData }
+}
+
+/**
+ * Closes the app. Use this instead of app.close() in any test that opens a project.
+ *
+ * Quitting while a project's shell is still starting can hang the app (a bug in the terminal code that predates
+ * these tests, listed in the README's known gaps). So when a terminal is on screen, wait until the shell has printed
+ * something before closing.
+ */
+export async function closeApp(app: ElectronApplication, win: Page): Promise<void> {
+  if ((await win.locator('.terminal-host').count()) > 0) {
+    await expect(win.locator('.terminal-host .xterm-rows')).toHaveText(/\S/, { timeout: 30_000 })
+  }
+  await app.close()
 }
 
 /** Makes the native folder picker answer with `dir` instead of opening a dialog. */

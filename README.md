@@ -93,7 +93,13 @@ Known gaps:
 
 - The two Claude calls are only tested against a canned-reply server. The prompts have not been judged against real
   replies yet.
-- A request to Claude cannot be cancelled. Each attempt times out after two minutes and is retried once.
+- A request to Claude cannot be cancelled. Each attempt times out after two minutes and is retried once. Leaving the
+  screen while one is running is safe: its reply is ignored.
+- The brief's "5 to 10 stages" is asked for in the prompt, not enforced. A brief with any stages at all is accepted.
+- Quitting within a second or two of opening a project can hang the app and leave `electron.exe` and
+  `powershell.exe` running. It happens while the project's shell is still starting, in terminal code that predates
+  Milestone 1. Reproduced in 2 of 15 test runs, cause not pinned down. The end-to-end tests wait for the shell
+  before closing (`closeApp` in `e2e/launch.ts`).
 - Closing the window doesn't warn about unsaved files.
 - No create, rename or delete in the file tree (use the terminal for now).
 - Monaco shows syntax errors only, not type errors, because it can't see the project's `node_modules`.

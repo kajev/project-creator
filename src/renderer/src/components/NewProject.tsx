@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Brief, CreatedProject, Proposal, ProposalInput } from '@shared/types'
 
 interface NewProjectProps {
@@ -30,19 +30,28 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [brief, setBrief] = useState<Brief | null>(null)
 
+  // False once the user has left this screen. A reply from Claude that arrives after that must not do anything:
+  // no error toast, and above all no folder picker opening over whatever they moved on to.
+  const alive = useRef(true)
+
   useEffect(() => {
+    alive.current = true
     window.api.ai.hasKey().then(
       (has) => setStep(has ? 'form' : 'key'),
       () => setStep('key')
     )
+    return () => {
+      alive.current = false
+    }
   }, [])
 
   const input = (): ProposalInput => ({ interests, level, language, hours: Number(hours) })
 
-  /** Shows the error. A rejected key is forgotten by the main process, so that case goes back to the key step. */
+  /** Shows the error. A key that is missing or no longer usable sends the user back to the key step. */
   const fail = async (err: unknown): Promise<void> => {
+    if (!alive.current) return
     onError(err)
-    if (!(await window.api.ai.hasKey())) setStep('key')
+    if (!(await window.api.ai.hasKey()) && alive.current) setStep('key')
   }
 
   const saveKey = async (e: React.FormEvent): Promise<void> => {
@@ -65,7 +74,9 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
     e.preventDefault()
     setBusy('Asking Claude for three project ideas. This can take a minute.')
     try {
-      setProposals(await window.api.ai.proposeProjects(input()))
+      const found = await window.api.ai.proposeProjects(input())
+      if (!alive.current) return
+      setProposals(found)
       setStep('proposals')
     } catch (err) {
       await fail(err)
@@ -95,6 +106,7 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
     } finally {
       setBusy(null)
     }
+    if (!alive.current) return
     setBrief(written)
     setStep('ready')
     await create(written)

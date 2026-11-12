@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { launchApp } from './launch'
+import { launchApp, tempDir } from './launch'
 
 // Not a real key. It only has to be a string we can look for on disk.
 const FAKE_KEY = 'sk-ant-e2e-not-a-real-key-0123456789'
@@ -35,6 +35,29 @@ test('the API key is stored encrypted, survives a restart, and is never readable
   await second.win.evaluate(() => window.api.ai.clearKey())
   expect(await second.win.evaluate(() => window.api.ai.hasKey())).toBe(false)
   await second.app.close()
+})
+
+test('a key with characters that cannot be sent is refused with a message that says what to do', async () => {
+  const { app, win } = await launchApp()
+  // A zero-width space, a curly quote, and a space in the middle: all easy to pick up when copying.
+  for (const bad of ['sk-ant-e2e​key', '“sk-ant-e2e-key”', 'sk-ant e2e-key']) {
+    const error = await win.evaluate((key) => window.api.ai.setKey(key).then(() => null, (e: Error) => e.message), bad)
+    expect(error).toContain("That doesn't look like an API key.")
+  }
+  expect(await win.evaluate(() => window.api.ai.hasKey())).toBe(false)
+  await app.close()
+})
+
+test('a key file that can no longer be decrypted counts as no key', async () => {
+  const userData = tempDir()
+  writeFileSync(join(userData, 'api-key.bin'), 'this is not something safeStorage wrote')
+  const { app, win } = await launchApp({ userData })
+  expect(await win.evaluate(() => window.api.ai.hasKey())).toBe(false)
+
+  // Saving a key again repairs it.
+  await win.evaluate((key) => window.api.ai.setKey(key), FAKE_KEY)
+  expect(await win.evaluate(() => window.api.ai.hasKey())).toBe(true)
+  await app.close()
 })
 
 test('an empty key is refused', async () => {

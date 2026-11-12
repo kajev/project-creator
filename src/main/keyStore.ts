@@ -9,18 +9,19 @@ import { join } from 'node:path'
  */
 const keyFile = (): string => join(app.getPath('userData'), 'api-key.bin')
 
+/** True only when a key is stored and can still be decrypted, so a broken key file counts as no key. */
 export async function hasKey(): Promise<boolean> {
-  try {
-    await fs.access(keyFile())
-    return true
-  } catch {
-    return false
-  }
+  return (await getKey()) !== null
 }
 
 export async function setKey(key: string): Promise<void> {
   const trimmed = typeof key === 'string' ? key.trim() : ''
   if (!trimmed) throw new Error('Paste your Claude API key first.')
+  // Keys are plain printable ASCII. Anything else (a space inside, a curly quote, an invisible character picked up
+  // while copying) cannot be sent in a request header, so refuse it here with a message that says what to do.
+  if (!/^[\x21-\x7e]+$/.test(trimmed)) {
+    throw new Error("That doesn't look like an API key. Copy it again, without spaces or extra characters.")
+  }
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error("This computer can't encrypt the key, so it was not saved.")
   }
