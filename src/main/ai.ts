@@ -1,8 +1,114 @@
+import Anthropic from '@anthropic-ai/sdk'
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { ipcMain } from 'electron'
-import { clearKey, hasKey, setKey } from './keyStore'
+import { z } from 'zod'
+import type { Brief, Proposal, ProposalInput } from '@shared/types'
+import { BriefSchema, parseWith, ProposalInputSchema, ProposalSchema } from './brief'
+import { clearKey, getKey, hasKey, setKey } from './keyStore'
+
+const MODEL = 'claude-opus-5-5'
+
+const ProposalsSchema = z.object({ proposals: z.array(ProposalSchema) })
+
+const PROPOSE_SYSTEM = `You help a learner choose a programming project to build on their own. They will write all of the code themselves, so each project has to be something they can realistically finish and be glad they built.
+
+Propose exactly three projects. Make them meaningfully different from each other (different kinds of program, not three variations of one idea) so the choice is a real one. Every project must fit the time the learner has, suit their experience, and follow from what they said they want to build or learn. If they named a language, use it for all three. If they did not, pick the language that best fits each project and their experience.
+
+For each project give:
+- title: a short plain name.
+- pitch: one or two sentences on what it is and why it is worth building.
+- stack: the language and main tools. Prefer the standard library and few dependencies.
+- estimatedHours: a realistic number for this learner, no more than the time they have.
+- skills: three to five specific things they will practise.`
+
+const BRIEF_SYSTEM = `You write the brief for a programming project, framed like a good classroom assignment. The learner builds the project alone. The brief exists to make starting easy and to make "done" unambiguous. It must not do any of the work for them, because working out how is the part they learn from.
+
+So describe what the finished project does and how to tell each step is done, never how to build it. Do not include code, pseudocode, file or function names, data structure choices or step-by-step instructions. Sample commands, sample input and expected output are fine, because they show the target without giving away the solution.
+
+Write these fields:
+- title, stack, estimatedHours: keep them consistent with the project the learner chose.
+- summary: one short paragraph on what they are building and why it is worth doing.
+- requirements: four to eight things the finished project must do, each one visible from the outside.
+- example: a concrete picture of the finished project in use, as plain text. For a command-line tool, a few sample commands with the output they print. For something with a screen, a short description of what is on it and one interaction.
+- stages: five to ten stages in the order to build them. Each stage is a small working step that builds on the one before, and the first is small enough to finish in the first sitting. Each stage has a title, a goal of one sentence, and doneWhen: two to four checks the learner can see for themselves by running the project.
+
+Keep it short and plain. The learner should be able to read the whole brief in a few minutes.`
+
+const LEVELS: Record<ProposalInput['level'], string> = {
+  new: 'new to programming',
+  some: 'has finished a course or a few tutorials, but has not built much alone',
+  comfortable: 'comfortable building small programs without a tutorial'
+}
+
+function describeLearner(input: ProposalInput): string {
+  return [
+    `What they want to build or learn: ${input.interests}`,
+    `Experience: ${LEVELS[input.level]}`,
+    `Language: ${input.language || 'no preference, choose what fits best'}`,
+    `Time they have for the whole project: ${input.hours} hours`
+  ].join('\n')
+}
+
+/** Turns an SDK error into one sentence the user can act on. */
+async function explain(err: unknown): Promise<Error> {
+  if (err instanceof Anthropic.AuthenticationError) {
+    // A rejected key is no use, so forget it. The UI then asks for a new one.
+    await clearKey()
+    return new Error('Claude rejected that API key. Check it and enter it again.')
+  }
+  if (err instanceof Anthropic.PermissionDeniedError) return new Error("That API key isn't allowed to use this model.")
+  if (err instanceof Anthropic.RateLimitError) return new Error('Claude is rate limiting this key. Wait a minute and try again.')
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return new Error('Claude took too long to answer. Try again.')
+  if (err instanceof Anthropic.APIConnectionError) return new Error("Couldn't reach Claude. Check your internet connection.")
+  if (err instanceof Anthropic.APIError) {
+    return new Error(`Claude returned an error (${err.status}): ${err.apiMessage ?? 'no details given'}`)
+  }
+  return err instanceof Error ? err : new Error(String(err))
+}
+
+/** One request, one reply, shaped by `schema`. The key never leaves the main process. */
+async function ask<T>(system: string, user: string, schema: z.ZodType<T>): Promise<T> {
+  const apiKey = await getKey()
+  if (!apiKey) throw new Error('Add your Claude API key first.')
+  const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 })
+  try {
+    const message = await client.messages.parse({
+      model: MODEL,
+      max_tokens: 16000,
+      system,
+      messages: [{ role: 'user', content: user }],
+      output_config: { effort: 'medium', format: zodOutputFormat(schema) }
+    })
+    if (message.stop_reason === 'refusal') {
+      throw new Error('Claude declined this request. Try describing what you want differently.')
+    }
+    if (message.stop_reason === 'max_tokens') throw new Error('The reply was cut off before it finished. Try again.')
+    if (!message.parsed_output) throw new Error("The reply wasn't in the expected format. Try again.")
+    return message.parsed_output
+  } catch (err) {
+    throw await explain(err)
+  }
+}
+
+export async function proposeProjects(input: ProposalInput): Promise<Proposal[]> {
+  const { proposals } = await ask(PROPOSE_SYSTEM, describeLearner(input), ProposalsSchema)
+  if (proposals.length < 3) throw new Error("Claude didn't come back with three projects. Try again.")
+  return proposals.slice(0, 3)
+}
+
+export async function writeBrief(input: ProposalInput, proposal: Proposal): Promise<Brief> {
+  const user = `${describeLearner(input)}\n\nThe project they chose:\n${JSON.stringify(proposal, null, 2)}`
+  const brief = await ask(BRIEF_SYSTEM, user, BriefSchema)
+  if (brief.stages.length === 0) throw new Error('The brief came back without any stages. Try again.')
+  return brief
+}
 
 export function registerAiHandlers(): void {
   ipcMain.handle('ai:hasKey', () => hasKey())
   ipcMain.handle('ai:setKey', (_event, key: string) => setKey(key))
   ipcMain.handle('ai:clearKey', () => clearKey())
+  ipcMain.handle('ai:propose', (_event, input: unknown) => proposeProjects(parseWith(ProposalInputSchema, input)))
+  ipcMain.handle('ai:writeBrief', (_event, input: unknown, proposal: unknown) =>
+    writeBrief(parseWith(ProposalInputSchema, input), parseWith(ProposalSchema, proposal))
+  )
 }

@@ -17,7 +17,9 @@ const api: ProjectCreatorApi = {
   ai: {
     hasKey: () => ipcRenderer.invoke('ai:hasKey'),
     setKey: (key) => ipcRenderer.invoke('ai:setKey', key),
-    clearKey: () => ipcRenderer.invoke('ai:clearKey')
+    clearKey: () => ipcRenderer.invoke('ai:clearKey'),
+    proposeProjects: (input) => ipcRenderer.invoke('ai:propose', input),
+    writeBrief: (input, proposal) => ipcRenderer.invoke('ai:writeBrief', input, proposal)
   },
   terminal: {
     start: (cwd, cols, rows) => ipcRenderer.invoke('terminal:start', cwd, cols, rows),

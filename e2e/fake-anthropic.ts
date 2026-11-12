@@ -1,0 +1,124 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
+
+/*
+ * A stand-in for the Claude API. The app is launched with ANTHROPIC_BASE_URL
+ * pointing here, so the real SDK code runs but no request leaves the machine
+ * and no money is spent.
+ */
+
+/** Not real keys. BAD_KEY makes the fake server answer 401. */
+export const GOOD_KEY = 'sk-ant-e2e-not-a-real-key-0123456789'
+export const BAD_KEY = 'sk-ant-e2e-rejected-key'
+
+export const FAKE_PROPOSALS = [
+  {
+    title: 'Task Tracker CLI',
+    pitch: 'A command-line to-do list that saves to a file. Small, useful, and you will use it yourself.',
+    stack: 'Python 3, standard library',
+    estimatedHours: 6,
+    skills: ['Reading command-line arguments', 'Saving data as JSON', 'Handling bad input']
+  },
+  {
+    title: 'Markdown Link Checker',
+    pitch: 'Scans a folder of notes and reports links that no longer work.',
+    stack: 'Python 3, standard library',
+    estimatedHours: 5,
+    skills: ['Walking a folder tree', 'Pattern matching', 'Making web requests']
+  },
+  {
+    title: 'Unit Converter',
+    pitch: 'Converts between everyday units from the terminal, with a table you can extend.',
+    stack: 'Python 3, standard library',
+    estimatedHours: 4,
+    skills: ['Designing a small data table', 'Parsing input', 'Writing tests']
+  }
+]
+
+export const FAKE_BRIEF = {
+  title: 'Task Tracker CLI',
+  summary: 'You are building a to-do list you run from the terminal. It keeps your tasks in a file, so they are still there tomorrow.',
+  stack: 'Python 3, standard library',
+  estimatedHours: 6,
+  requirements: [
+    'Add a task with a description.',
+    'List all tasks, or only the ones with a given status.',
+    'Mark a task as in progress or done.',
+    'Delete a task.',
+    'Keep tasks between runs.'
+  ],
+  example: '$ task add "Buy milk"\nAdded task 1\n$ task list\n1  todo  Buy milk',
+  stages: [
+    { title: 'Say hello', goal: 'Get a program that runs.', doneWhen: ['Running it with no arguments prints a usage line.'] },
+    { title: 'Add a task', goal: 'Accept a description and confirm it.', doneWhen: ['Adding a task prints its new id.', 'An empty description is refused.'] },
+    { title: 'Remember tasks', goal: 'Keep tasks between runs.', doneWhen: ['A task added in one run shows up in the next.'] },
+    { title: 'List tasks', goal: 'Show what is saved.', doneWhen: ['Listing prints every task with its id and status.'] },
+    { title: 'Change status', goal: 'Move a task along.', doneWhen: ['Marking a task done changes what the list shows.', 'An unknown id gives a clear message.'] },
+    { title: 'Delete a task', goal: 'Remove what you no longer need.', doneWhen: ['A deleted task no longer appears in the list.'] }
+  ]
+}
+
+export interface FakeRequest {
+  apiKey: string | undefined
+  // The JSON body the SDK sent, as-is.
+  body: any
+}
+
+export interface FakeAnthropic {
+  url: string
+  requests: FakeRequest[]
+  close(): Promise<void>
+}
+
+export async function startFakeAnthropic(): Promise<FakeAnthropic> {
+  const requests: FakeRequest[] = []
+
+  const server = createServer(async (req, res) => {
+    let raw = ''
+    for await (const chunk of req) raw += chunk
+    const send = (status: number, payload: unknown): void => {
+      res.writeHead(status, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(payload))
+    }
+
+    if (req.method !== 'POST' || !req.url?.startsWith('/v1/messages')) {
+      send(404, { type: 'error', error: { type: 'not_found_error', message: `no route for ${req.method} ${req.url}` } })
+      return
+    }
+    const body = JSON.parse(raw)
+    // SDK 1.x sends the key as "Authorization: Bearer <key>".
+    const apiKey = req.headers.authorization?.replace(/^Bearer /, '')
+    requests.push({ apiKey, body })
+
+    if (apiKey === BAD_KEY) {
+      send(401, { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } })
+      return
+    }
+
+    // The two calls differ in the shape they ask for, so answer by that.
+    const wantsProposals = JSON.stringify(body.output_config ?? {}).includes('proposals')
+    send(200, {
+      id: 'msg_e2e',
+      type: 'message',
+      role: 'assistant',
+      model: body.model,
+      content: [{ type: 'text', text: JSON.stringify(wantsProposals ? { proposals: FAKE_PROPOSALS } : FAKE_BRIEF) }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 }
+    })
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections()
+        server.close(() => resolve())
+      })
+  }
+}

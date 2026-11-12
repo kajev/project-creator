@@ -87,6 +87,10 @@ export interface ProjectCreatorApi {
     /** One way only: the key goes to the main process and nothing sends it back. */
     setKey(key: string): Promise<void>
     clearKey(): Promise<void>
+    /** Three project ideas that fit the user's answers. */
+    proposeProjects(input: ProposalInput): Promise<Proposal[]>
+    /** The full assignment for the idea the user picked. */
+    writeBrief(input: ProposalInput, proposal: Proposal): Promise<Brief>
   }
   terminal: {
     start(cwd: string, cols: number, rows: number): Promise<TerminalSession>

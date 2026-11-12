@@ -1,4 +1,42 @@
-import type { Brief } from '@shared/types'
+import { z } from 'zod'
+import type { Brief, Proposal, ProposalInput } from '@shared/types'
+
+/*
+ * Runtime shapes for the types in shared/types.ts. ProposalSchema and
+ * BriefSchema are also what Claude's replies must match, so they stay free of
+ * length limits (structured outputs only support plain types).
+ */
+export const ProposalInputSchema = z.object({
+  interests: z.string().trim().min(1, 'Say what you want to build or learn.').max(2000, 'Keep that under 2000 characters.'),
+  level: z.enum(['new', 'some', 'comfortable']),
+  language: z.string().trim().max(60, 'Keep the language under 60 characters.'),
+  hours: z.number().min(1, 'Hours must be at least 1.').max(500, 'Hours must be 500 or fewer.')
+}) satisfies z.ZodType<ProposalInput>
+
+export const ProposalSchema = z.object({
+  title: z.string(),
+  pitch: z.string(),
+  stack: z.string(),
+  estimatedHours: z.number(),
+  skills: z.array(z.string())
+}) satisfies z.ZodType<Proposal>
+
+export const BriefSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  stack: z.string(),
+  estimatedHours: z.number(),
+  requirements: z.array(z.string()),
+  example: z.string(),
+  stages: z.array(z.object({ title: z.string(), goal: z.string(), doneWhen: z.array(z.string()) }))
+}) satisfies z.ZodType<Brief>
+
+/** Checks a value that crossed the IPC bridge or came from disk. Throws a one-line message when it does not fit. */
+export function parseWith<T>(schema: z.ZodType<T>, value: unknown): T {
+  const result = schema.safeParse(value)
+  if (!result.success) throw new Error(result.error.issues[0]?.message ?? 'That value has the wrong shape.')
+  return result.data
+}
 
 /** Names Windows refuses as a file or folder name, whatever the letter case. */
 const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/

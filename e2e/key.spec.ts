@@ -14,7 +14,13 @@ test('the API key is stored encrypted, survives a restart, and is never readable
   expect(await first.win.evaluate(() => window.api.ai.hasKey())).toBe(true)
 
   // The bridge offers no way to read the key back.
-  expect(await first.win.evaluate(() => Object.keys(window.api.ai).sort())).toEqual(['clearKey', 'hasKey', 'setKey'])
+  expect(await first.win.evaluate(() => Object.keys(window.api.ai).sort())).toEqual([
+    'clearKey',
+    'hasKey',
+    'proposeProjects',
+    'setKey',
+    'writeBrief'
+  ])
   await first.app.close()
 
   // On disk it is encrypted: the key text does not appear in the file.
