@@ -27,6 +27,8 @@ export function EditorPane({ activePath, onContentChange, onCursorChange }: Edit
       fontSize: 14,
       lineHeight: 22,
       fontLigatures: true,
+      // Long lines wrap to the editor's width, so nothing runs off to the right.
+      wordWrap: 'on',
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       smoothScrolling: true,

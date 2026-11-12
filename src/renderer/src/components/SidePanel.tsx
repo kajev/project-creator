@@ -66,6 +66,7 @@ function BriefView({ brief }: SidePanelProps): React.JSX.Element {
           <li key={i}>
             <span className="stage-name">{stage.title}</span>
             <span className="stage-goal">{stage.goal}</span>
+            {stage.why && <span className="stage-why">Why this stage: {stage.why}</span>}
             <span className="stage-done-label">Done when</span>
             <ul className="stage-done">
               {stage.doneWhen.map((item, j) => (

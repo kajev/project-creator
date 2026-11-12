@@ -49,12 +49,43 @@ export const FAKE_BRIEF = {
   ],
   example: '$ task add "Buy milk"\nAdded task 1\n$ task list\n1  todo  Buy milk',
   stages: [
-    { title: 'Say hello', goal: 'Get a program that runs.', doneWhen: ['Running it with no arguments prints a usage line.'] },
-    { title: 'Add a task', goal: 'Accept a description and confirm it.', doneWhen: ['Adding a task prints its new id.', 'An empty description is refused.'] },
-    { title: 'Remember tasks', goal: 'Keep tasks between runs.', doneWhen: ['A task added in one run shows up in the next.'] },
-    { title: 'List tasks', goal: 'Show what is saved.', doneWhen: ['Listing prints every task with its id and status.'] },
-    { title: 'Change status', goal: 'Move a task along.', doneWhen: ['Marking a task done changes what the list shows.', 'An unknown id gives a clear message.'] },
-    { title: 'Delete a task', goal: 'Remove what you no longer need.', doneWhen: ['A deleted task no longer appears in the list.'] }
+    {
+      title: 'Say hello',
+      goal: 'Get a program that runs.',
+      // Long on purpose: the end-to-end test uses this line to check that the editor wraps.
+      why: 'Starting with something that runs gives you a working base and proves your setup is right before there is any real logic to get wrong. Every later stage adds to this program instead of starting over.',
+      doneWhen: ['Running it with no arguments prints a usage line.']
+    },
+    {
+      title: 'Add a task',
+      goal: 'Accept a description and confirm it.',
+      why: 'Adding comes first because nothing else can be tried until a task exists.',
+      doneWhen: ['Adding a task prints its new id.', 'An empty description is refused.']
+    },
+    {
+      title: 'Remember tasks',
+      goal: 'Keep tasks between runs.',
+      why: 'Saving early means every later stage works with real saved data.',
+      doneWhen: ['A task added in one run shows up in the next.']
+    },
+    {
+      title: 'List tasks',
+      goal: 'Show what is saved.',
+      why: 'Listing lets you see what the earlier stages stored, so mistakes show up.',
+      doneWhen: ['Listing prints every task with its id and status.']
+    },
+    {
+      title: 'Change status',
+      goal: 'Move a task along.',
+      why: 'Changing a task means finding it by its id, which deleting needs too.',
+      doneWhen: ['Marking a task done changes what the list shows.', 'An unknown id gives a clear message.']
+    },
+    {
+      title: 'Delete a task',
+      goal: 'Remove what you no longer need.',
+      why: 'Deleting comes last because it reuses what the earlier stages set up.',
+      doneWhen: ['A deleted task no longer appears in the list.']
+    }
   ]
 }
 

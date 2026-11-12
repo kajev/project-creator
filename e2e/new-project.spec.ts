@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { existsSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
 import { closeApp, launchApp, pickFolder, shot, tempDir } from './launch'
@@ -35,7 +35,17 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await expect(win.locator('.tab.active')).toContainText('ASSIGNMENT.md')
   await expect(win.locator('.monaco-editor .view-lines')).toContainText('Tracker')
   await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
-  expect(existsSync(join(parent, 'task-tracker-cli', 'ASSIGNMENT.md'))).toBe(true)
+  // Each stage in the assignment carries its reasoning.
+  const assignment = readFileSync(join(parent, 'task-tracker-cli', 'ASSIGNMENT.md'), 'utf8')
+  expect(assignment).toContain(`**Why this stage:** ${FAKE_BRIEF.stages[0].why}`)
+
+  // Long lines wrap to the editor's width instead of running off to the right.
+  const widestLine = await win
+    .locator('.monaco-editor .view-line > span')
+    .evaluateAll((spans) => Math.max(...spans.map((span) => span.getBoundingClientRect().width)))
+  const editorWidth = await win.locator('.monaco-editor').first().evaluate((el) => el.getBoundingClientRect().width)
+  expect(widestLine).toBeGreaterThan(0)
+  expect(widestLine).toBeLessThanOrEqual(editorWidth)
 
   // The Guide panel shows the same brief.
   const guide = win.getByRole('region', { name: 'Guide' })
@@ -43,6 +53,7 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await expect(guide.locator('.brief-list li')).toHaveText(FAKE_BRIEF.requirements)
   await expect(guide.locator('.brief-example')).toContainText('Added task 1')
   await expect(guide.locator('.stage-name')).toHaveText(FAKE_BRIEF.stages.map((s) => s.title))
+  await expect(guide.locator('.stage-why')).toHaveText(FAKE_BRIEF.stages.map((s) => `Why this stage: ${s.why}`))
   await expect(guide.locator('.stage-done li')).toHaveText(FAKE_BRIEF.stages.flatMap((s) => s.doneWhen))
   await win.screenshot({ path: shot('new-project-4-opened') })
 

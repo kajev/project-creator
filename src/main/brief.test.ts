@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Brief } from '@shared/types'
-import { briefToMarkdown, slugify } from './brief'
+import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
 
 describe('slugify', () => {
   it('lowercases and joins words with dashes', () => {
@@ -40,7 +40,13 @@ const brief: Brief = {
   requirements: ['Add a task with a description.', 'List tasks, optionally by status.'],
   example: '$ task add "Buy milk"\nAdded task 1',
   stages: [
-    { title: 'Say hello', goal: 'Get a program running.', doneWhen: ['Running it prints a usage line.'] },
+    {
+      title: 'Say hello',
+      goal: 'Get a program running.',
+      why: 'A running program is the base every later stage adds to.',
+      doneWhen: ['Running it prints a usage line.']
+    },
+    // No "why": briefs written before stages had reasoning look like this.
     { title: 'Add a task', goal: 'Save one task.', doneWhen: ['A new task appears in the file.', 'It has an id.'] }
   ]
 }
@@ -67,7 +73,17 @@ describe('briefToMarkdown', () => {
   })
 
   it('numbers the stages and lists each "done when" item as a checkbox', () => {
-    expect(md).toContain('### Stage 1: Say hello\n\nGet a program running.\n\nDone when:\n\n- [ ] Running it prints a usage line.\n')
+    expect(md).toContain(
+      '### Stage 1: Say hello\n\nGet a program running.\n\n**Why this stage:** A running program is the base every later stage adds to.\n\nDone when:\n\n- [ ] Running it prints a usage line.\n'
+    )
     expect(md).toContain('### Stage 2: Add a task\n\nSave one task.\n\nDone when:\n\n- [ ] A new task appears in the file.\n- [ ] It has an id.\n')
+  })
+
+  it('gives the reasoning only for stages that have it', () => {
+    expect(md.match(/\*\*Why this stage:\*\*/g)).toHaveLength(1)
+  })
+
+  it('still accepts a brief whose stages have no reasoning', () => {
+    expect(parseWith(BriefSchema, brief).stages[1].why).toBeUndefined()
   })
 })

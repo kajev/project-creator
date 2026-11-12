@@ -78,13 +78,13 @@ What works:
 
 - **Start a new project.** Enter your Claude API key once, answer four questions, pick one of three proposed
   projects, and choose a folder. The app writes the brief there and opens it.
-- **Guide panel** with the open project's brief: summary, requirements, an example, and the stages with their "done
-  when" items. Folders without a brief say so. The Tutor tab is a stub.
+- **Guide panel** with the open project's brief: summary, requirements, an example, and the stages, each with its
+  reasoning and "done when" items. Folders without a brief say so. The Tutor tab is a stub.
 - **Start screen** with "Open a folder" (Ctrl+O), "Start a new project", and a list of recent folders.
 - **File tree** that loads folders as you expand them. `.git`, `node_modules`, `__pycache__`, `.venv`,
   `.project-creator`, `.DS_Store` and `Thumbs.db` are hidden.
-- **Monaco editor** with tabs, unsaved-change dots, Ctrl+S to save, and syntax highlighting for most languages. Files
-  over 5 MB and binary files are refused with a clear message.
+- **Monaco editor** with tabs, unsaved-change dots, Ctrl+S to save, and syntax highlighting for most languages. Long
+  lines wrap to the editor's width. Files over 5 MB and binary files are refused with a clear message.
 - **Terminal** in the project folder via node-pty (PowerShell on Windows). Ctrl+` shows or hides it, and hiding keeps
   the shell alive. If node-pty fails to load, it falls back to a basic line-by-line mode.
 - **Resizable panels**: drag the dividers, or focus one and use the arrow keys.

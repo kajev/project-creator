@@ -30,7 +30,7 @@ Write these fields:
 - summary: one short paragraph on what they are building and why it is worth doing.
 - requirements: four to eight things the finished project must do, each one visible from the outside.
 - example: a concrete picture of the finished project in use, as plain text. For a command-line tool, a few sample commands with the output they print. For something with a screen, a short description of what is on it and one interaction.
-- stages: five to ten stages in the order to build them. Each stage is a small working step that builds on the one before, and the first is small enough to finish in the first sitting. Each stage has a title, a goal of one sentence, and doneWhen: two to four checks the learner can see for themselves by running the project.
+- stages: five to ten stages in the order to build them. Each stage is a small working step that builds on the one before, and the first is small enough to finish in the first sitting. Each stage has a title, a goal of one sentence, why, and doneWhen. why is two or three sentences of reasoning: why this stage comes at this point, what it makes possible for the stages after it, and what the learner practises by doing it. It gives reasons, not instructions, so it must not say how to build the stage. doneWhen is two to four checks the learner can see for themselves by running the project.
 
 Keep it short and plain. The learner should be able to read the whole brief in a few minutes.`
 

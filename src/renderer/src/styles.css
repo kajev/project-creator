@@ -833,6 +833,11 @@ textarea.input {
   display: block;
   color: var(--text-dim);
 }
+.stage-why {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-faint);
+}
 .stage-done-label {
   display: block;
   margin-top: 6px;

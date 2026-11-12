@@ -46,6 +46,8 @@ export interface BriefStage {
   title: string
   /** One sentence. */
   goal: string
+  /** The reasoning: why this stage comes here and what the user gets from it. Briefs written before this lack it. */
+  why?: string
   /** Checks the user can observe by running the project. */
   doneWhen: string[]
 }

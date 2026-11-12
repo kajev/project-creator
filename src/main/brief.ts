@@ -28,7 +28,7 @@ export const BriefSchema = z.object({
   estimatedHours: z.number(),
   requirements: z.array(z.string()),
   example: z.string(),
-  stages: z.array(z.object({ title: z.string(), goal: z.string(), doneWhen: z.array(z.string()) }))
+  stages: z.array(z.object({ title: z.string(), goal: z.string(), why: z.string().optional(), doneWhen: z.array(z.string()) }))
 }) satisfies z.ZodType<Brief>
 
 /** Checks a value that crossed the IPC bridge or came from disk. Throws a one-line message when it does not fit. */
@@ -78,8 +78,9 @@ export function briefToMarkdown(brief: Brief): string {
     ''
   ]
   brief.stages.forEach((stage, i) => {
-    lines.push(`### Stage ${i + 1}: ${stage.title}`, '', stage.goal, '', 'Done when:', '')
-    lines.push(...stage.doneWhen.map((item) => `- [ ] ${item}`), '')
+    lines.push(`### Stage ${i + 1}: ${stage.title}`, '', stage.goal, '')
+    if (stage.why) lines.push(`**Why this stage:** ${stage.why}`, '')
+    lines.push('Done when:', '', ...stage.doneWhen.map((item) => `- [ ] ${item}`), '')
   })
   return lines.join('\n')
 }
