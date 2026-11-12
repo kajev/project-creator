@@ -14,12 +14,16 @@ README.md has the purpose, what is settled versus undecided, and the code layout
 
 ## Rules
 
-- The developer is on Windows (PowerShell). The base build was only ever run on Linux.
-- Product scope: only the four core features in the README are settled. Anything under "Open question" or
-  "Ideas discussed, not settled" needs the developer's OK before it gets built.
+- The developer is on Windows (PowerShell), Node 25. `electron.exe` is a GUI program, so PowerShell does not wait
+  for it: use `Start-Process -Wait` when a script needs its exit code.
+- Product scope: the four core features and the README's "Decided" table are settled. Anything under "Open question"
+  or "Ideas discussed, not settled" needs the developer's OK before it gets built.
 - The UI (renderer) is sandboxed and has no Node access. Anything that needs files, network, API keys or storage is
   implemented in `src/main`, typed in `src/shared/types.ts`, exposed in `src/preload/index.ts`, and called through
-  `window.api`. API keys never reach the renderer.
+  `window.api`.
+- The Claude API key is typed in the UI once and sent to the main process. Nothing may send it back to the renderer,
+  and all Claude calls are made in `src/main`.
+- Tests never call the real Claude API. End-to-end tests point `ANTHROPIC_BASE_URL` at `e2e/fake-anthropic.ts`.
 - File access stays locked to the open project folder (`insideRoot` in `src/main/project.ts`).
 - Monaco 0.55 keeps its TypeScript settings at `monaco.typescript`, not `monaco.languages.typescript`.
 - Styles use the tokens at the top of `src/renderer/src/styles.css`. `--pencil` is reserved for "current" items.
