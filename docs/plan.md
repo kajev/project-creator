@@ -288,7 +288,7 @@ only gaps that affect correctness or this plan's requirements, not style. I fix 
 
 ## Baseline facts a fresh session needs
 
-- Baseline commit is `e4a3f96`. Install, typecheck and build pass on Windows. The built app was driven end to end
+- Baseline commit is `741662f`. Install, typecheck and build pass on Windows. The built app was driven end to end
   (folder, tree, terminal through node-pty and PowerShell, Monaco, save) with no errors.
 - Electron 44 does not download its binary during `npm install`. Run `node node_modules/electron/install.js`, or let
   the first `npm run dev` fetch it.
