@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
+import { registerAiHandlers } from './ai'
 import { registerProjectHandlers } from './project'
 import { killAllTerminals, registerTerminalHandlers } from './terminal'
 
@@ -43,6 +44,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerProjectHandlers()
   registerTerminalHandlers()
+  registerAiHandlers()
   createWindow()
 
   app.on('activate', () => {

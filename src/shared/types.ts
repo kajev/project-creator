@@ -82,6 +82,12 @@ export interface ProjectCreatorApi {
     readFile(file: string): Promise<string>
     writeFile(file: string, content: string): Promise<void>
   }
+  ai: {
+    hasKey(): Promise<boolean>
+    /** One way only: the key goes to the main process and nothing sends it back. */
+    setKey(key: string): Promise<void>
+    clearKey(): Promise<void>
+  }
   terminal: {
     start(cwd: string, cols: number, rows: number): Promise<TerminalSession>
     write(id: number, data: string): void

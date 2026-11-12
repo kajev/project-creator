@@ -14,6 +14,11 @@ const api: ProjectCreatorApi = {
     readFile: (file) => ipcRenderer.invoke('fs:readFile', file),
     writeFile: (file, content) => ipcRenderer.invoke('fs:writeFile', file, content)
   },
+  ai: {
+    hasKey: () => ipcRenderer.invoke('ai:hasKey'),
+    setKey: (key) => ipcRenderer.invoke('ai:setKey', key),
+    clearKey: () => ipcRenderer.invoke('ai:clearKey')
+  },
   terminal: {
     start: (cwd, cols, rows) => ipcRenderer.invoke('terminal:start', cwd, cols, rows),
     write: (id, data) => ipcRenderer.send('terminal:write', id, data),
