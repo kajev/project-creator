@@ -19,6 +19,52 @@ export interface TerminalSession {
   shell: string
 }
 
+/** What the user tells us before the AI proposes projects. */
+export interface ProposalInput {
+  /** Free text: what the user wants to build or learn. */
+  interests: string
+  level: 'new' | 'some' | 'comfortable'
+  /** Empty means the AI picks a language that fits. */
+  language: string
+  /** Hours the user has for the whole project. */
+  hours: number
+}
+
+/** One of the three project ideas the user chooses between. */
+export interface Proposal {
+  title: string
+  /** One or two sentences. */
+  pitch: string
+  /** Language and main tools. */
+  stack: string
+  estimatedHours: number
+  /** What the user will practise. */
+  skills: string[]
+}
+
+export interface BriefStage {
+  title: string
+  /** One sentence. */
+  goal: string
+  /** Checks the user can observe by running the project. */
+  doneWhen: string[]
+}
+
+/** The assignment for one project. It says what and "done when", never how. */
+export interface Brief {
+  title: string
+  /** What you are building and why, one short paragraph. */
+  summary: string
+  stack: string
+  estimatedHours: number
+  /** What the finished thing must do. */
+  requirements: string[]
+  /** A concrete picture of "finished": sample commands and output, or a described screen. */
+  example: string
+  /** 5 to 10, in order. */
+  stages: BriefStage[]
+}
+
 /** Everything the UI is allowed to ask the main process for. */
 export interface ProjectCreatorApi {
   /** "win32", "darwin" or "linux". */
