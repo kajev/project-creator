@@ -30,6 +30,11 @@ test('proposals and the brief come back through the SDK using the stored key', a
   expect(proposalPrompt).toContain('6 hours')
   expect(JSON.stringify(fake.requests[1].body.messages)).toContain(FAKE_PROPOSALS[0].title)
 
+  // The reply shape is also written into the prompt, for servers that ignore output_config.
+  expect(fake.requests[0].body.system).toContain('JSON Schema')
+  expect(fake.requests[0].body.system).toContain('"proposals"')
+  expect(fake.requests[1].body.system).toContain('"doneWhen"')
+
   await app.close()
   await fake.close()
 })

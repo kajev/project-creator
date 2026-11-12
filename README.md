@@ -120,8 +120,9 @@ npm install
 npm run dev
 ```
 
-`npm run dev` opens the app with hot reload. Edits under `src/renderer` update the window; edits under `src/main`
-restart the app. Electron downloads its own binary the first time it runs, not during `npm install`.
+`npm run dev` opens the app with hot reload. Edits under `src/renderer` update the window; edits under `src/main` or
+`src/preload` need the app closed and started again. Electron downloads its own binary the first time it runs, not
+during `npm install`.
 
 | Script | What it does |
 | --- | --- |

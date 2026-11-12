@@ -72,13 +72,16 @@ async function ask<T>(system: string, user: string, schema: z.ZodType<T>): Promi
   if (!apiKey) throw new Error('Add your Claude API key first.')
   const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 })
   const format = zodOutputFormat(schema)
+  // The shape is also written into the prompt. Claude enforces `format` by itself, but a stand-in server that
+  // ignores it (a proxy in front of another model) has only the prompt to go on.
+  const shaped = `${system}\n\nReply with only a JSON object that matches this JSON Schema, with no other text:\n${JSON.stringify(format.schema)}`
   try {
     // Not messages.parse: it parses the text before we can look at stop_reason, so a reply that was cut off or
     // declined would surface as a JSON syntax error instead of saying what happened.
     const message = await client.messages.create({
       model: MODEL,
       max_tokens: 16000,
-      system,
+      system: shaped,
       messages: [{ role: 'user', content: user }],
       output_config: { effort: 'medium', format }
     })
