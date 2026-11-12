@@ -6,6 +6,8 @@ const api: ProjectCreatorApi = {
   project: {
     openFolder: () => ipcRenderer.invoke('project:openFolder'),
     openRecent: (root) => ipcRenderer.invoke('project:openRecent', root),
+    create: (brief) => ipcRenderer.invoke('project:create', brief),
+    brief: () => ipcRenderer.invoke('project:brief'),
     recent: () => ipcRenderer.invoke('project:recent'),
     close: () => ipcRenderer.invoke('project:close')
   },

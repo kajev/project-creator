@@ -65,6 +65,13 @@ export interface Brief {
   stages: BriefStage[]
 }
 
+/** A project folder the app just created from a brief. */
+export interface CreatedProject {
+  project: ProjectInfo
+  /** Full path of the ASSIGNMENT.md written into the new folder. */
+  assignmentPath: string
+}
+
 /** Everything the UI is allowed to ask the main process for. */
 export interface ProjectCreatorApi {
   /** "win32", "darwin" or "linux". */
@@ -74,6 +81,13 @@ export interface ProjectCreatorApi {
     openFolder(): Promise<ProjectInfo | null>
     /** Reopens a folder from the recent list. Rejects if it no longer exists. */
     openRecent(root: string): Promise<ProjectInfo>
+    /**
+     * Asks where the new folder should go, creates it with the brief inside, and opens it.
+     * Resolves to null when the user cancels. Rejects if the folder exists and is not empty.
+     */
+    create(brief: Brief): Promise<CreatedProject | null>
+    /** The brief of the open project, or null when the folder has none. */
+    brief(): Promise<Brief | null>
     recent(): Promise<string[]>
     close(): Promise<void>
   }

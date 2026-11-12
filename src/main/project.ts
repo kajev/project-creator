@@ -1,10 +1,16 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { basename, join, relative, resolve, isAbsolute, sep } from 'node:path'
-import type { DirEntry, ProjectInfo } from '@shared/types'
+import type { Brief, CreatedProject, DirEntry, ProjectInfo } from '@shared/types'
+import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
+
+/** Where the app keeps its own data inside a project it created. */
+const APP_DIR = '.project-creator'
+const BRIEF_FILE = 'brief.json'
+const ASSIGNMENT_FILE = 'ASSIGNMENT.md'
 
 /** Folders that are never worth showing in the tree. */
-const HIDDEN = new Set(['.git', 'node_modules', '__pycache__', '.venv', '.DS_Store', 'Thumbs.db'])
+const HIDDEN = new Set(['.git', 'node_modules', '__pycache__', '.venv', '.DS_Store', 'Thumbs.db', APP_DIR])
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 const MAX_RECENT = 8
 
@@ -71,6 +77,49 @@ export function registerProjectHandlers(): void {
       const list = (await loadRecent()).filter((p) => p !== root)
       await fs.writeFile(recentFile(), JSON.stringify(list, null, 2), 'utf8')
       throw new Error(`Couldn't open ${root}. It may have been moved or deleted, so it was removed from your recent list.`)
+    }
+  })
+
+  ipcMain.handle('project:create', async (event, value: unknown): Promise<CreatedProject | null> => {
+    const brief = parseWith(BriefSchema, value)
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const options = {
+      title: 'Choose where to put the new project folder',
+      buttonLabel: 'Create project here',
+      properties: ['openDirectory', 'createDirectory'] as Array<'openDirectory' | 'createDirectory'>
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    const dir = join(result.filePaths[0], slugify(brief.title))
+    let existing: string[] = []
+    try {
+      existing = await fs.readdir(dir)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    }
+    if (existing.length > 0) {
+      throw new Error(`A folder named "${basename(dir)}" already exists there and is not empty. Choose another location.`)
+    }
+
+    await fs.mkdir(dir, { recursive: true })
+    const project = await setRoot(dir)
+    // From here on the new folder is the open project, so every write goes through insideRoot.
+    const assignmentPath = insideRoot(join(project.root, ASSIGNMENT_FILE))
+    await fs.mkdir(insideRoot(join(project.root, APP_DIR)), { recursive: true })
+    await fs.writeFile(insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
+    await fs.writeFile(assignmentPath, briefToMarkdown(brief), 'utf8')
+    return { project, assignmentPath }
+  })
+
+  ipcMain.handle('project:brief', async (): Promise<Brief | null> => {
+    if (!currentRoot) return null
+    try {
+      const raw = await fs.readFile(insideRoot(join(currentRoot, APP_DIR, BRIEF_FILE)), 'utf8')
+      return parseWith(BriefSchema, JSON.parse(raw))
+    } catch {
+      // No brief here, or the file was edited into something unreadable. Either way the folder has no brief.
+      return null
     }
   })
 

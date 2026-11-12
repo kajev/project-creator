@@ -26,5 +26,12 @@ export async function launchApp(options: { userData?: string; env?: Record<strin
   return { app, win, userData }
 }
 
+/** Makes the native folder picker answer with `dir` instead of opening a dialog. */
+export async function pickFolder(app: ElectronApplication, dir: string): Promise<void> {
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] })
+  }, dir)
+}
+
 /** Screenshots land in test-results/screens so they can be looked at after a run. */
 export const shot = (name: string): string => join('test-results', 'screens', `${name}.png`)
