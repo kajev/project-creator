@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CreatedProject, ProjectInfo, TerminalSession } from '@shared/types'
+import type { Brief, CreatedProject, ProjectInfo, TerminalSession } from '@shared/types'
 import { FileTree } from './components/FileTree'
 import { TabBar, type OpenFile } from './components/TabBar'
 import { EditorPane } from './components/EditorPane'
@@ -46,6 +46,8 @@ export default function App(): React.JSX.Element {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   /** True while the "Start a new project" screen is showing instead of Welcome. */
   const [starting, setStarting] = useState(false)
+  /** The open project's brief, or null when the folder has none. */
+  const [brief, setBrief] = useState<Brief | null>(null)
   const [recent, setRecent] = useState<string[]>([])
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -75,6 +77,20 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     document.title = project ? `${project.name} - Project Creator` : 'Project Creator'
+  }, [project])
+
+  // The Guide panel shows the brief of whichever project is open.
+  useEffect(() => {
+    setBrief(null)
+    if (!project) return
+    let cancelled = false
+    window.api.project.brief().then(
+      (found) => !cancelled && setBrief(found),
+      () => undefined
+    )
+    return () => {
+      cancelled = true
+    }
   }, [project])
 
   // Transient messages clear themselves.
@@ -314,7 +330,7 @@ export default function App(): React.JSX.Element {
           <>
             <Splitter direction="vertical" label="Resize guide panel" onDrag={(d) => setSizes((s) => ({ ...s, right: clamp(s.right - d, 260, 560) }))} />
             <div className="col-right" style={{ width: sizes.right }}>
-              <SidePanel />
+              <SidePanel brief={brief} />
             </div>
           </>
         )}

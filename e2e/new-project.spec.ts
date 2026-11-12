@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { BAD_KEY, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
+import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
 import { launchApp, pickFolder, shot, tempDir } from './launch'
 
 const INTERESTS = 'command-line tools I would use myself'
@@ -35,8 +35,28 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await expect(win.locator('.tab.active')).toContainText('ASSIGNMENT.md')
   await expect(win.locator('.monaco-editor .view-lines')).toContainText('Tracker')
   await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
-  await win.screenshot({ path: shot('new-project-4-opened') })
   expect(existsSync(join(parent, 'task-tracker-cli', 'ASSIGNMENT.md'))).toBe(true)
+
+  // The Guide panel shows the same brief.
+  const guide = win.getByRole('region', { name: 'Guide' })
+  await expect(guide.locator('.brief-title')).toHaveText(FAKE_BRIEF.title)
+  await expect(guide.locator('.brief-list li')).toHaveText(FAKE_BRIEF.requirements)
+  await expect(guide.locator('.brief-example')).toContainText('Added task 1')
+  await expect(guide.locator('.stage-name')).toHaveText(FAKE_BRIEF.stages.map((s) => s.title))
+  await expect(guide.locator('.stage-done li')).toHaveText(FAKE_BRIEF.stages.flatMap((s) => s.doneWhen))
+  await win.screenshot({ path: shot('new-project-4-opened') })
+
+  // The Tutor tab is honest about not existing yet.
+  await guide.getByRole('tab', { name: 'Tutor' }).click()
+  await expect(guide).toContainText('The tutor is not built yet.')
+
+  // A plain folder has no brief, and the panel says so instead of showing the last one.
+  await pickFolder(app, tempDir('pc-e2e-plain-'))
+  await win.getByRole('button', { name: 'Open folder' }).click()
+  await guide.getByRole('tab', { name: 'Brief' }).click()
+  await expect(guide).toContainText('This folder has no brief.')
+  await expect(guide.locator('.brief-title')).toHaveCount(0)
+  await win.screenshot({ path: shot('guide-no-brief') })
 
   // The answers reached Claude as typed.
   const sent = JSON.stringify(fake.requests[0].body.messages)

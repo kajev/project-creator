@@ -1,80 +1,80 @@
 import { useState } from 'react'
+import type { Brief } from '@shared/types'
 
-type PanelTab = 'milestones' | 'tutor'
+type PanelTab = 'brief' | 'tutor'
 
-const HINT_LEVELS = ['Nudge', 'Concept', 'Pseudocode', 'Code']
+interface SidePanelProps {
+  /** The open project's brief, or null when the folder has none. */
+  brief: Brief | null
+}
 
-/**
- * Placeholder for the two features that come next in the build order:
- * the milestone plan and the tutor chat. The layout is real so the
- * workbench feels right while those features are built.
- */
-export function SidePanel(): React.JSX.Element {
-  const [tab, setTab] = useState<PanelTab>('milestones')
+export function SidePanel({ brief }: SidePanelProps): React.JSX.Element {
+  const [tab, setTab] = useState<PanelTab>('brief')
 
   return (
     <section className="panel side-panel" aria-label="Guide">
       <div className="side-tabs" role="tablist" aria-label="Guide">
-        <button role="tab" aria-selected={tab === 'milestones'} className={`side-tab${tab === 'milestones' ? ' active' : ''}`} onClick={() => setTab('milestones')}>
-          Milestones
+        <button role="tab" aria-selected={tab === 'brief'} className={`side-tab${tab === 'brief' ? ' active' : ''}`} onClick={() => setTab('brief')}>
+          Brief
         </button>
         <button role="tab" aria-selected={tab === 'tutor'} className={`side-tab${tab === 'tutor' ? ' active' : ''}`} onClick={() => setTab('tutor')}>
           Tutor
         </button>
       </div>
 
-      {tab === 'milestones' ? <MilestonesPlaceholder /> : <TutorPlaceholder />}
+      {tab === 'brief' ? (
+        <BriefView brief={brief} />
+      ) : (
+        <div className="side-body">
+          <p className="empty-text">The tutor is not built yet.</p>
+        </div>
+      )}
     </section>
   )
 }
 
-function MilestonesPlaceholder(): React.JSX.Element {
+function BriefView({ brief }: SidePanelProps): React.JSX.Element {
+  if (!brief) {
+    return (
+      <div className="side-body">
+        <p className="empty-text">This folder has no brief. Projects made with &ldquo;Start a new project&rdquo; get one.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="side-body">
-      <div className="empty-block">
-        <h3 className="empty-title">No plan for this folder yet</h3>
-        <p className="empty-text">
-          Projects you start from the picker get a plan of 5 to 10 milestones. You see one at a time, each with a clear
-          &ldquo;done when&rdquo; check and the engineering decision it asks you to make.
-        </p>
-      </div>
-      <ol className="milestone-ghost" aria-label="Example of how milestones will look">
-        <li className="current">
-          <span className="ghost-name">Set up the data model</span>
-          <span className="ghost-check">Done when the schema is written and you can explain why you chose it.</span>
-        </li>
-        <li>
-          <span className="ghost-name">First API route</span>
-        </li>
-        <li>
-          <span className="ghost-name">Connect the UI</span>
-        </li>
-      </ol>
-    </div>
-  )
-}
+      <h3 className="brief-title">{brief.title}</h3>
+      <p className="brief-meta">
+        {brief.stack}, about {brief.estimatedHours} {brief.estimatedHours === 1 ? 'hour' : 'hours'}
+      </p>
+      <p className="brief-text">{brief.summary}</p>
 
-function TutorPlaceholder(): React.JSX.Element {
-  return (
-    <div className="side-body tutor">
-      <div className="empty-block">
-        <h3 className="empty-title">Ask about the file you&rsquo;re in</h3>
-        <p className="empty-text">
-          The tutor will see your open file, the current milestone and recent terminal errors. Answers start small, and you
-          ask for more only when you need it.
-        </p>
-      </div>
-      <ol className="hint-ladder" aria-label="Hint levels">
-        {HINT_LEVELS.map((level) => (
-          <li key={level}>{level}</li>
+      <h4 className="brief-heading">Requirements</h4>
+      <ol className="brief-list">
+        {brief.requirements.map((item, i) => (
+          <li key={i}>{item}</li>
         ))}
       </ol>
-      <form className="tutor-input" onSubmit={(e) => e.preventDefault()}>
-        <textarea placeholder="The tutor isn't connected yet" disabled rows={3} aria-label="Message the tutor" />
-        <button type="submit" className="button" disabled>
-          Ask
-        </button>
-      </form>
+
+      <h4 className="brief-heading">What finished looks like</h4>
+      <pre className="brief-example">{brief.example}</pre>
+
+      <h4 className="brief-heading">Stages</h4>
+      <ol className="brief-stages">
+        {brief.stages.map((stage, i) => (
+          <li key={i}>
+            <span className="stage-name">{stage.title}</span>
+            <span className="stage-goal">{stage.goal}</span>
+            <span className="stage-done-label">Done when</span>
+            <ul className="stage-done">
+              {stage.doneWhen.map((item, j) => (
+                <li key={j}>{item}</li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }
