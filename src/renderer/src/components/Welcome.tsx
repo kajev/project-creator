@@ -4,27 +4,24 @@ interface WelcomeProps {
   recent: string[]
   onOpenFolder: () => void
   onOpenRecent: (root: string) => void
+  onStartNew: () => void
 }
 
-export function Welcome({ recent, onOpenFolder, onOpenRecent }: WelcomeProps): React.JSX.Element {
+export function Welcome({ recent, onOpenFolder, onOpenRecent, onStartNew }: WelcomeProps): React.JSX.Element {
   return (
     <main className="welcome">
       <div className="welcome-inner">
         <h1 className="welcome-title">Project Creator</h1>
-        <p className="welcome-lede">
-          Pick a project, get the scaffolding, then build it yourself. You make the engineering calls, and the tutor hints
-          before it tells.
-        </p>
+        <p className="welcome-lede">Pick a project, get a clear assignment brief, then build it yourself.</p>
 
         <div className="welcome-actions">
           <button className="button primary" onClick={onOpenFolder}>
             Open a folder
           </button>
-          <button className="button" disabled title="The project picker is coming in a later build">
+          <button className="button" onClick={onStartNew}>
             Start a new project
           </button>
         </div>
-        <p className="welcome-note">Starting a new project from the picker isn&rsquo;t built yet. For now, open any folder you already have.</p>
 
         <section className="recent" aria-labelledby="recent-heading">
           <h2 id="recent-heading" className="recent-heading">

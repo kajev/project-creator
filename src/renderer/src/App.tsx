@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ProjectInfo, TerminalSession } from '@shared/types'
+import type { CreatedProject, ProjectInfo, TerminalSession } from '@shared/types'
 import { FileTree } from './components/FileTree'
 import { TabBar, type OpenFile } from './components/TabBar'
 import { EditorPane } from './components/EditorPane'
 import { TerminalPane } from './components/TerminalPane'
 import { SidePanel } from './components/SidePanel'
 import { Welcome } from './components/Welcome'
+import { NewProject } from './components/NewProject'
 import { StatusBar } from './components/StatusBar'
 import { Splitter } from './components/Splitter'
 import { CloseIcon } from './components/Icons'
@@ -43,6 +44,8 @@ const errorText = (err: unknown): string => {
 
 export default function App(): React.JSX.Element {
   const [project, setProject] = useState<ProjectInfo | null>(null)
+  /** True while the "Start a new project" screen is showing instead of Welcome. */
+  const [starting, setStarting] = useState(false)
   const [recent, setRecent] = useState<string[]>([])
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -104,6 +107,7 @@ export default function App(): React.JSX.Element {
     (info: ProjectInfo) => {
       resetWorkspace()
       setProject(info)
+      setStarting(false)
       loadRecent()
     },
     [resetWorkspace, loadRecent]
@@ -154,6 +158,15 @@ export default function App(): React.JSX.Element {
       setActivePath(path)
     },
     [showError]
+  )
+
+  /** A project made from a brief opens with its assignment in the editor. */
+  const handleCreated = useCallback(
+    (created: CreatedProject) => {
+      openProject(created.project)
+      void openFile(created.assignmentPath)
+    },
+    [openProject, openFile]
   )
 
   const closeFile = useCallback(
@@ -242,7 +255,11 @@ export default function App(): React.JSX.Element {
   if (!project) {
     return (
       <div className="app">
-        <Welcome recent={recent} onOpenFolder={handleOpenFolder} onOpenRecent={handleOpenRecent} />
+        {starting ? (
+          <NewProject onCreated={handleCreated} onCancel={() => setStarting(false)} onError={(err) => showError(errorText(err))} />
+        ) : (
+          <Welcome recent={recent} onOpenFolder={handleOpenFolder} onOpenRecent={handleOpenRecent} onStartNew={() => setStarting(true)} />
+        )}
         {errorToast}
       </div>
     )
