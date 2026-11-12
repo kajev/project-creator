@@ -8,8 +8,9 @@ README.md has the purpose, what is settled versus undecided, and the code layout
 - `npm run dev`: run the app with hot reload
 - `npm run typecheck`: type-check the main process and the UI. Run it after any series of code changes.
 - `npm run build`: production build into `out/`
-
-There are no tests yet.
+- `npm test`: unit tests (Vitest). Test files sit next to the code as `*.test.ts`.
+- `npm run test:e2e`: builds, then runs the end-to-end tests in `e2e/` (Playwright driving the real app). A window
+  opens for each test. Screenshots go to `test-results/screens/`.
 
 ## Rules
 
