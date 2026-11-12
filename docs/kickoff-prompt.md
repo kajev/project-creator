@@ -1,6 +1,6 @@
 # Kickoff prompt for Claude Code
 
-Open a terminal in `C:\Users\Acer\Desktop\Projects\project-creator`, run `claude`, and paste everything in the block
+Open a terminal in the project folder, run `claude`, and paste everything in the block
 below as the first message.
 
 ```

@@ -115,7 +115,7 @@ Needs Node.js 22.12 or later. Node 24 LTS is the safe choice: the project is dev
 Playwright do not list as supported, so Vitest is pinned to version 4.
 
 ```powershell
-cd C:\Users\Acer\Desktop\Projects\project-creator
+cd project-creator
 npm install
 npm run dev
 ```
@@ -204,3 +204,7 @@ Dark theme with slate-blue surfaces. One yellow accent (`--pencil`) is reserved 
 the active file and the primary button. Blue (`--blueprint`) is for focus and selection. Colors and type sizes are
 tokens at the top of `src/renderer/src/styles.css`. The Monaco and terminal themes repeat some of them as plain values,
 because those libraries take colors from code.
+
+## License
+
+MIT. See `LICENSE`.

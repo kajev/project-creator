@@ -301,4 +301,4 @@ only gaps that affect correctness or this plan's requirements, not style. I fix 
   - `npm audit` reports dompurify (high) through monaco-editor 0.55.1. The fix is monaco-editor 0.57, a breaking
     upgrade.
   - No `.gitattributes`, so git warns about LF to CRLF on every file.
-  - An empty git repo exists at `C:\Users\Acer\Desktop\.git`. It looks accidental.
+  - An empty git repo exists two folders above the project, in the Desktop folder. It looks accidental.

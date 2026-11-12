@@ -1,9 +1,10 @@
 {
   "name": "project-creator",
   "version": "0.1.0",
-  "description": "A desktop workbench that helps you pick projects, scaffolds them, and coaches you while you build.",
+  "description": "A desktop app that helps you start a coding project and build it yourself.",
   "main": "./out/main/index.js",
   "author": "Kajev Mylvaganam",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
