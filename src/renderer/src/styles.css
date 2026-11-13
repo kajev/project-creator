@@ -886,6 +886,33 @@ textarea.input {
   padding-left: 16px;
   color: var(--text-dim);
 }
+/* The items are checkboxes, so the list needs no bullets. */
+.stage-done {
+  padding-left: 0;
+  list-style: none;
+}
+.tick {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0;
+  cursor: pointer;
+}
+.tick input {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin: 4px 0 0;
+  accent-color: var(--blueprint);
+}
+.tick input:checked + span {
+  color: var(--text-faint);
+}
+/* The stage to work on now. */
+.brief-stages > li.current::marker,
+.brief-stages > li.current .stage-name {
+  color: var(--pencil);
+}
 .stage-tests code,
 .command code {
   font-family: var(--font-code);

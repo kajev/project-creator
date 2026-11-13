@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Brief, Proposal, ProposalInput, StarterInfo } from '@shared/types'
+import type { Brief, Progress, Proposal, ProposalInput, StarterInfo } from '@shared/types'
 import { starterToMarkdown } from './starter'
 
 /*
@@ -31,6 +31,9 @@ export const BriefSchema = z.object({
   example: z.string(),
   stages: z.array(z.object({ title: z.string(), goal: z.string(), why: z.string().optional(), doneWhen: z.array(z.string()) }))
 }) satisfies z.ZodType<Brief>
+
+/** The shape of .project-creator/progress.json. */
+export const ProgressSchema = z.array(z.array(z.boolean())) satisfies z.ZodType<Progress>
 
 /** Checks a value that crossed the IPC bridge or came from disk. Throws a one-line message when it does not fit. */
 export function parseWith<T>(schema: z.ZodType<T>, value: unknown): T {

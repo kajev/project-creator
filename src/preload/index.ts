@@ -9,6 +9,8 @@ const api: ProjectCreatorApi = {
     create: (brief, starter) => ipcRenderer.invoke('project:create', brief, starter),
     brief: () => ipcRenderer.invoke('project:brief'),
     starter: () => ipcRenderer.invoke('project:starter'),
+    progress: () => ipcRenderer.invoke('project:progress'),
+    setProgress: (ticked) => ipcRenderer.invoke('project:setProgress', ticked),
     recent: () => ipcRenderer.invoke('project:recent'),
     close: () => ipcRenderer.invoke('project:close')
   },

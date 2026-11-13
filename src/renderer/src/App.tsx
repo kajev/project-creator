@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Brief, CreatedProject, ProjectInfo, StarterInfo, TerminalSession } from '@shared/types'
+import type { Brief, CreatedProject, Progress, ProjectInfo, StarterInfo, TerminalSession } from '@shared/types'
 import { FileTree } from './components/FileTree'
 import { TabBar, type OpenFile } from './components/TabBar'
 import { EditorPane } from './components/EditorPane'
@@ -49,6 +49,8 @@ export default function App(): React.JSX.Element {
   /** The open project's brief, or null when the folder has none. */
   const [brief, setBrief] = useState<Brief | null>(null)
   const [starter, setStarter] = useState<StarterInfo | null>(null)
+  /** Which "done when" items are ticked. Rows and items may be missing: a missing one is not ticked. */
+  const [ticked, setTicked] = useState<Progress>([])
   const [recent, setRecent] = useState<string[]>([])
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -86,8 +88,13 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     setBrief(null)
     setStarter(null)
+    setTicked([])
     if (!project) return
     let cancelled = false
+    window.api.project.progress().then(
+      (found) => !cancelled && setTicked(found),
+      () => undefined
+    )
     window.api.project.brief().then(
       (found) => !cancelled && setBrief(found),
       () => undefined
@@ -100,6 +107,18 @@ export default function App(): React.JSX.Element {
       cancelled = true
     }
   }, [project])
+
+  /** Ticks or unticks one "done when" item and saves the whole set with the project. */
+  const handleTick = useCallback(
+    (stage: number, item: number, value: boolean) => {
+      if (!brief) return
+      // Rebuilt in the brief's shape each time, so a ticks file from an older or damaged state cannot linger.
+      const next = brief.stages.map((s, i) => s.doneWhen.map((_, j) => (i === stage && j === item ? value : ticked[i]?.[j] === true)))
+      setTicked(next)
+      window.api.project.setProgress(next).catch(showFailure)
+    },
+    [brief, ticked, showFailure]
+  )
 
   // Transient messages clear themselves.
   useEffect(() => {
@@ -338,7 +357,7 @@ export default function App(): React.JSX.Element {
           <>
             <Splitter direction="vertical" label="Resize guide panel" onDrag={(d) => setSizes((s) => ({ ...s, right: clamp(s.right - d, 260, 560) }))} />
             <div className="col-right" style={{ width: sizes.right }}>
-              <SidePanel brief={brief} starter={starter} />
+              <SidePanel brief={brief} starter={starter} ticked={ticked} onTick={handleTick} />
             </div>
           </>
         )}

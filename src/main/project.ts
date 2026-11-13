@@ -1,8 +1,8 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path'
-import type { Brief, CreatedProject, DirEntry, ProjectInfo, StarterInfo } from '@shared/types'
-import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
+import type { Brief, CreatedProject, DirEntry, Progress, ProjectInfo, StarterInfo } from '@shared/types'
+import { BriefSchema, briefToMarkdown, parseWith, ProgressSchema, slugify } from './brief'
 import { checkRelativePath } from './paths'
 import { starterInfo, StarterInfoSchema, StarterSchema, validateStarter } from './starter'
 
@@ -10,6 +10,7 @@ import { starterInfo, StarterInfoSchema, StarterSchema, validateStarter } from '
 const APP_DIR = '.project-creator'
 const BRIEF_FILE = 'brief.json'
 const STARTER_FILE = 'starter.json'
+const PROGRESS_FILE = 'progress.json'
 const ASSIGNMENT_FILE = 'ASSIGNMENT.md'
 
 /** Folders that are never worth showing in the tree. */
@@ -198,6 +199,24 @@ export function registerProjectHandlers(): void {
       // No brief here, or the file was edited into something unreadable. Either way the folder has no brief.
       return null
     }
+  })
+
+  ipcMain.handle('project:progress', async (): Promise<Progress> => {
+    if (!currentRoot) return []
+    try {
+      const raw = await fs.readFile(await insideRoot(join(currentRoot, APP_DIR, PROGRESS_FILE)), 'utf8')
+      return parseWith(ProgressSchema, JSON.parse(raw))
+    } catch {
+      // Nothing ticked yet, or the file is unreadable. Either way the project opens with nothing ticked.
+      return []
+    }
+  })
+
+  ipcMain.handle('project:setProgress', async (_event, value: unknown): Promise<void> => {
+    if (!currentRoot) throw new Error('Open a project folder first.')
+    const ticked = parseWith(ProgressSchema, value)
+    // No mkdir: the app's folder is there in any project that has a brief, and only those have anything to tick.
+    await fs.writeFile(await insideRoot(join(currentRoot, APP_DIR, PROGRESS_FILE)), JSON.stringify(ticked), 'utf8')
   })
 
   ipcMain.handle('project:recent', () => loadRecent())

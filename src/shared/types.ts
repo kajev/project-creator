@@ -132,6 +132,10 @@ export interface ProjectCreatorApi {
     brief(): Promise<Brief | null>
     /** How to run the open project's starter and what its tests look at, or null when it has no starter. */
     starter(): Promise<StarterInfo | null>
+    /** The ticked "done when" items of the open project. Empty when nothing is ticked yet. */
+    progress(): Promise<Progress>
+    /** Saves the ticks with the project. */
+    setProgress(ticked: Progress): Promise<void>
     recent(): Promise<string[]>
     close(): Promise<void>
   }

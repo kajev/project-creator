@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Brief, StarterInfo } from '@shared/types'
+import type { Brief, Progress, StarterInfo } from '@shared/types'
 
 type PanelTab = 'brief' | 'tutor'
 
@@ -8,9 +8,12 @@ interface SidePanelProps {
   brief: Brief | null
   /** How to run the project's starter and what its tests look at, or null when it has no starter. */
   starter: StarterInfo | null
+  /** Which "done when" items are ticked: ticked[stage][item]. A missing entry is not ticked. */
+  ticked: Progress
+  onTick: (stage: number, item: number, value: boolean) => void
 }
 
-export function SidePanel({ brief, starter }: SidePanelProps): React.JSX.Element {
+export function SidePanel({ brief, starter, ticked, onTick }: SidePanelProps): React.JSX.Element {
   const [tab, setTab] = useState<PanelTab>('brief')
 
   return (
@@ -25,7 +28,7 @@ export function SidePanel({ brief, starter }: SidePanelProps): React.JSX.Element
       </div>
 
       {tab === 'brief' ? (
-        <BriefView brief={brief} starter={starter} />
+        <BriefView brief={brief} starter={starter} ticked={ticked} onTick={onTick} />
       ) : (
         <div className="side-body">
           <p className="empty-text">The tutor is not built yet.</p>
@@ -62,7 +65,7 @@ function Command({ text }: { text: string }): React.JSX.Element {
   )
 }
 
-function BriefView({ brief, starter }: SidePanelProps): React.JSX.Element {
+function BriefView({ brief, starter, ticked, onTick }: SidePanelProps): React.JSX.Element {
   if (!brief) {
     return (
       <div className="side-body">
@@ -70,6 +73,10 @@ function BriefView({ brief, starter }: SidePanelProps): React.JSX.Element {
       </div>
     )
   }
+
+  const isTicked = (stage: number, item: number): boolean => ticked[stage]?.[item] === true
+  // The stage to work on: the first one with something left to tick. -1 once everything is ticked.
+  const current = brief.stages.findIndex((stage, i) => stage.doneWhen.some((_, j) => !isTicked(i, j)))
 
   return (
     <div className="side-body">
@@ -120,14 +127,19 @@ function BriefView({ brief, starter }: SidePanelProps): React.JSX.Element {
         {brief.stages.map((stage, i) => {
           const tests = starter ? starter.tests.filter((test) => test.stage === i + 1) : []
           return (
-            <li key={i}>
+            <li key={i} className={i === current ? 'current' : undefined} aria-current={i === current ? 'step' : undefined}>
               <span className="stage-name">{stage.title}</span>
               <span className="stage-goal">{stage.goal}</span>
               {stage.why && <span className="stage-why">Why this stage: {stage.why}</span>}
               <span className="stage-done-label">Done when</span>
               <ul className="stage-done">
                 {stage.doneWhen.map((item, j) => (
-                  <li key={j}>{item}</li>
+                  <li key={j}>
+                    <label className="tick">
+                      <input type="checkbox" checked={isTicked(i, j)} onChange={(e) => onTick(i, j, e.target.checked)} />
+                      <span>{item}</span>
+                    </label>
+                  </li>
                 ))}
               </ul>
               {tests.length > 0 && (
