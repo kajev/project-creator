@@ -40,7 +40,7 @@ Settled in the planning interview on 2026-11-11. "Built" means it works today.
 
 Why the help dial starts low: in two randomized studies, unrestricted AI raised task scores but not learning, and in
 one it lowered unaided exam scores. Hint-only tutors matched having no AI and never beat it. Links are in
-`docs/plan.md`.
+`docs/milestone-1.md`.
 
 ## Open question (not decided)
 
@@ -72,7 +72,8 @@ These are suggestions, not requirements. Check before building any of them.
 ## Current state
 
 Milestone 1 is built: you can start a new project and get an AI-written assignment brief. There is no skeleton
-generation, no tutor and no chat yet. `docs/plan.md` has the plan that was followed.
+generation, no tutor and no chat yet. `docs/milestone-1.md` has the plan that was followed. `docs/plan.md` has the
+plan for Milestone 2.
 
 What works:
 
@@ -176,7 +177,7 @@ src/
     src/lib/paths.ts       Path helpers that handle Windows and POSIX separators
     src/styles.css         Design tokens and all styles
 e2e/           End-to-end tests, the launch helper and the canned-reply server
-docs/plan.md   The plan for the milestone that was last built
+docs/          plan.md is the plan for the next milestone. milestone-1.md is the plan that was built.
 ```
 
 ### Security model
