@@ -22,18 +22,19 @@ These four are the settled core. Everything else below is marked as decided, und
 
 ## Decided
 
-Settled in the planning interview on 2026-11-11. "Built" means it works today.
+Settled in the planning interviews on 2026-11-11 and 2026-11-12. "Built" means it works today.
 
 | Topic | Decision | Built |
 | --- | --- | --- |
-| Brief contents | Goal and requirements, a concrete example of "finished", ordered stages with "done when" items, starter files with TODOs, a way to check. Each part can be turned on or off. | Goal, requirements, example and stages. Not yet: starter files, checks, toggles. |
+| Brief contents | Goal and requirements, a concrete example of "finished", ordered stages with "done when" items, starter files with TODOs, a way to check. Each part can be turned on or off. | Yes. Starter files and tests can each be switched off when you start a project. |
 | Picking a project | The AI proposes three from a few questions. Also: bring your own idea, or link a GitHub repo (as an idea list, a tutorial to turn into a brief, or starting code). | AI proposes three. |
-| Boilerplate | An AI-written skeleton by default, hand-made templates as a choice. | No |
-| Stage check | A checklist you tick, plus runnable tests. | Checklist text only. No ticking, no tests. |
+| Boilerplate | An AI-written skeleton by default, hand-made templates as a choice. The skeleton runs out of the box: setup is done, and every real feature is left as a TODO. | The AI-written skeleton. Not yet: hand-made templates. |
+| Stage check | A checklist you tick, plus runnable tests. The tests are AI-written, live in a file you can add to, and come with a description of what each one looks at. | Yes. You run the tests yourself: the app does not run them or read their results. |
+| Commands | The app shows the AI's setup, run and test commands for you to copy. It never runs them. | Yes |
 | Help level | A 1 to 5 dial: 1 questions only, 2 concept, 3 pseudocode, 4 small snippet, 5 full code for the stuck part. The ceiling is set per project and every question starts at 1. | No |
 | AI provider | The user's own Claude API key. Model `claude-opus-5-5`. | Yes |
 | Key storage | Electron `safeStorage`, in the app's settings folder. | Yes |
-| Where briefs live | In the project folder: `ASSIGNMENT.md` for the user, `.project-creator/brief.json` for the app. No database. | Yes |
+| Where briefs live | In the project folder: `ASSIGNMENT.md` for the user, and `.project-creator/` for the app (`brief.json`, `starter.json` for the commands and test descriptions, `progress.json` for the ticks). No database. | Yes |
 | Languages | Any. The AI picks unless the user names one. | Yes |
 | Project size | The user says how many hours they have each time. | Yes |
 | Tutor context | The app is the editor, so the tutor reads the open file, recent changes and terminal output. No screen capture. | No |
@@ -71,19 +72,24 @@ These are suggestions, not requirements. Check before building any of them.
 
 ## Current state
 
-Milestone 1 is built: you can start a new project and get an AI-written assignment brief. There is no skeleton
-generation, no tutor and no chat yet. `docs/milestone-1.md` has the plan that was followed. `docs/plan.md` has the
-plan for Milestone 2.
+Milestones 1 and 2 are built: you can start a new project and get an AI-written assignment brief, starter files
+that run, and tests. There is no tutor and no chat yet. `docs/milestone-1.md` and `docs/plan.md` are the two plans
+that were followed.
 
 What works:
 
 - **Start a new project.** Enter your Claude API key once, answer four questions, pick one of three proposed
   projects, and choose a folder. The app writes the brief there and opens it.
+- **Starter files.** After the brief, the AI writes a small starter that runs as it is, with a TODO for each stage
+  and a test file. Two switches on the questions form turn the starter and the tests off. If the starter cannot be
+  written, the brief is kept and you can try again or continue without it.
 - **Guide panel** with the open project's brief: summary, requirements, an example, and the stages, each with its
-  reasoning and "done when" items. Folders without a brief say so. The Tutor tab is a stub.
+  reasoning and "done when" items. With a starter it also lists the setup, run and test commands, each with a Copy
+  button, and what each test looks at. Every "done when" item is a checkbox, the ticks are saved with the project,
+  and the stage to work on is highlighted. Folders without a brief say so. The Tutor tab is a stub.
 - **Start screen** with "Open a folder" (Ctrl+O), "Start a new project", and a list of recent folders.
-- **File tree** that loads folders as you expand them. `.git`, `node_modules`, `__pycache__`, `.venv`,
-  `.project-creator`, `.DS_Store` and `Thumbs.db` are hidden.
+- **File tree** that loads folders as you expand them, with New file and New folder. `.git`, `node_modules`,
+  `__pycache__`, `.venv`, `.project-creator`, `.DS_Store` and `Thumbs.db` are hidden.
 - **Monaco editor** with tabs, unsaved-change dots, Ctrl+S to save, and syntax highlighting for most languages. Long
   lines wrap to the editor's width. Files over 5 MB and binary files are refused with a clear message.
 - **Terminal** in the project folder via node-pty (PowerShell on Windows). Ctrl+` shows or hides it, and hiding keeps
@@ -92,17 +98,25 @@ What works:
 
 Known gaps:
 
-- The two Claude calls are only tested against a canned-reply server. The prompts have not been judged against real
-  replies yet.
-- A request to Claude cannot be cancelled. Each attempt times out after two minutes and is retried once. Leaving the
-  screen while one is running is safe: its reply is ignored.
+- The three Claude calls are tested against a canned-reply server and, by hand, through a local proxy in front of
+  another model. The app has not been run with a real Claude key, so the prompts have not been judged against
+  Claude's own replies.
+- The app checks where a starter's files go and what its commands look like. It cannot tell whether the starter
+  really runs, whether the packages it names exist, or whether it leaves the right things undone. Read the commands
+  before you run them.
+- Tests are run by hand and the app does not read their results. Ticking a stage off is up to you.
+- "Only stage 1's tests are switched on" and "tests look at the project from outside" are asked for in the prompt,
+  not enforced.
+- A project made with starter files off, or before starter files existed, cannot get them later.
+- A request to Claude cannot be cancelled. The ideas and the brief time out after two minutes each, the starter
+  after ten, and each is retried once. Leaving the screen while one is running is safe: its reply is ignored.
 - The brief's "5 to 10 stages" is asked for in the prompt, not enforced. A brief with any stages at all is accepted.
 - Quitting within a second or two of opening a project can hang the app and leave `electron.exe` and
   `powershell.exe` running. It happens while the project's shell is still starting, in terminal code that predates
   Milestone 1. Reproduced in 2 of 15 test runs, cause not pinned down. The end-to-end tests wait for the shell
   before closing (`closeApp` in `e2e/launch.ts`).
 - Closing the window doesn't warn about unsaved files.
-- No create, rename or delete in the file tree (use the terminal for now).
+- No rename or delete in the file tree (use the terminal for now).
 - Monaco shows syntax errors only, not type errors, because it can't see the project's `node_modules`.
 - `npm run dev` logs two errors on every start: an xterm `TypeError` reading `dimensions`, and
   `Error: AttachConsole failed` from node-pty. The app keeps working. The likely cause is React StrictMode mounting
@@ -140,8 +154,9 @@ during `npm install`.
 - **End-to-end tests** in `e2e/` launch the production build with Playwright's `_electron` API. Each launch gets a
   temporary settings folder (`--user-data-dir`), so tests never touch your real key or recent list. A window opens
   for each test. Screenshots go to `test-results/screens/`.
-- **No test calls the real Claude API.** `e2e/fake-anthropic.ts` is a small local server with canned replies, and the
-  app is launched with `ANTHROPIC_BASE_URL` pointing at it. The real SDK code path runs.
+- **No test calls the real Claude API.** `e2e/fake-anthropic.ts` is a small local server with canned replies, plain
+  and streamed, and the app is launched with `ANTHROPIC_BASE_URL` pointing at it. The real SDK code path runs.
+- **No test touches your clipboard.** The Copy button's test replaces the clipboard call in the page.
 
 ## Tech stack
 
@@ -161,11 +176,14 @@ during `npm install`.
 src/
   main/        Electron main process (Node). Owns the file system, terminals, the API key and Claude calls.
     index.ts     Window setup and security settings
-    project.ts   Open folder, recent list, file read/write (locked to the open folder), create a project from a brief
+    project.ts   Open folder, recent list, file read/write/create (locked to the open folder), create a project from
+                 a brief and a starter, saved ticks
     terminal.ts  node-pty sessions, with a child_process fallback
     keyStore.ts  The Claude API key, encrypted with safeStorage
-    ai.ts        The two Claude calls (three proposals, one brief), their prompts and error messages
+    ai.ts        The three Claude calls (three proposals, one brief, one starter), their prompts and error messages
     brief.ts     Pure functions and runtime shapes for briefs: slugify, briefToMarkdown, zod schemas
+    starter.ts   The starter's shape, the checks it must pass before it is written, and its part of ASSIGNMENT.md
+    paths.ts     The rules for a path typed by the user or written by the AI
   preload/     The bridge. Exposes a small typed window.api and nothing else.
   shared/      Types used on both sides of the bridge (types.ts)
   renderer/    The React.js UI
@@ -177,13 +195,24 @@ src/
     src/lib/paths.ts       Path helpers that handle Windows and POSIX separators
     src/styles.css         Design tokens and all styles
 e2e/           End-to-end tests, the launch helper and the canned-reply server
-docs/          plan.md is the plan for the next milestone. milestone-1.md is the plan that was built.
+docs/          The plans that were followed: milestone-1.md, then plan.md for Milestone 2
 ```
 
 ### Security model
 
 The UI runs sandboxed with context isolation and no Node access. It can only call the functions on `window.api`, and the
-main process rejects any file path outside the folder the user opened. Terminals are started in that folder.
+main process rejects any file path outside the folder the user opened. Folder links are resolved first, so a link
+inside the project that leads elsewhere is rejected too. Terminals are started in that folder.
+
+Files the AI writes are checked in the main process before anything touches the disk (`validateStarter` in
+`src/main/starter.ts`). A path is refused if it leaves the project, starts at a drive or network share, uses a name
+or character Windows reserves, starts with a dot (except `.gitignore`), or collides with another file. There are
+limits on how many files and how large. A `package.json` with a script that `npm install` would run is refused. A
+starter that breaks any rule is refused as a whole, never repaired, and files are created so that nothing is
+overwritten.
+
+The app never runs a command the AI wrote. Setup, run and test commands are shown for you to copy, and a command
+with a line break in it is refused, because pasting it would run the first part at once.
 
 The Claude API key is typed into the app once. It goes from the UI to the main process, is encrypted by the operating
 system (DPAPI on Windows) and saved in the app's settings folder. Nothing sends it back to the UI, and all requests
@@ -202,7 +231,7 @@ A feature that needs the system (files, network, API keys, storage) is added in 
 ## Design
 
 Dark theme with slate-blue surfaces. One yellow accent (`--pencil`) is reserved for "current" things: the active tab,
-the active file and the primary button. Blue (`--blueprint`) is for focus and selection. Colors and type sizes are
+the active file, the primary button and the stage you are on. Blue (`--blueprint`) is for focus and selection. Colors and type sizes are
 tokens at the top of `src/renderer/src/styles.css`. The Monaco and terminal themes repeat some of them as plain values,
 because those libraries take colors from code.
 
