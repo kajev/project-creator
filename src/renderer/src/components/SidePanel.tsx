@@ -1,14 +1,16 @@
-import { useState } from 'react'
-import type { Brief } from '@shared/types'
+import { useEffect, useState } from 'react'
+import type { Brief, StarterInfo } from '@shared/types'
 
 type PanelTab = 'brief' | 'tutor'
 
 interface SidePanelProps {
   /** The open project's brief, or null when the folder has none. */
   brief: Brief | null
+  /** How to run the project's starter and what its tests look at, or null when it has no starter. */
+  starter: StarterInfo | null
 }
 
-export function SidePanel({ brief }: SidePanelProps): React.JSX.Element {
+export function SidePanel({ brief, starter }: SidePanelProps): React.JSX.Element {
   const [tab, setTab] = useState<PanelTab>('brief')
 
   return (
@@ -23,7 +25,7 @@ export function SidePanel({ brief }: SidePanelProps): React.JSX.Element {
       </div>
 
       {tab === 'brief' ? (
-        <BriefView brief={brief} />
+        <BriefView brief={brief} starter={starter} />
       ) : (
         <div className="side-body">
           <p className="empty-text">The tutor is not built yet.</p>
@@ -33,7 +35,34 @@ export function SidePanel({ brief }: SidePanelProps): React.JSX.Element {
   )
 }
 
-function BriefView({ brief }: SidePanelProps): React.JSX.Element {
+/** A command the user runs themselves. The app shows it and can copy it, and never runs it. */
+function Command({ text }: { text: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(timer)
+  }, [copied])
+
+  const copy = (): void => {
+    navigator.clipboard.writeText(text).then(
+      () => setCopied(true),
+      () => setCopied(false)
+    )
+  }
+
+  return (
+    <div className="command">
+      <code>{text}</code>
+      <button type="button" className="button small" onClick={copy} aria-label={`Copy: ${text}`}>
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  )
+}
+
+function BriefView({ brief, starter }: SidePanelProps): React.JSX.Element {
   if (!brief) {
     return (
       <div className="side-body">
@@ -50,6 +79,32 @@ function BriefView({ brief }: SidePanelProps): React.JSX.Element {
       </p>
       <p className="brief-text">{brief.summary}</p>
 
+      {starter && (
+        <>
+          <h4 className="brief-heading">Getting started</h4>
+          <p className="brief-text">
+            The project already has starter files that run. The AI wrote them and these commands, so read a command before
+            you run it. Paste it into the terminal and press Enter.
+          </p>
+          {starter.setup.length > 0 && <p className="command-label">Set up, once</p>}
+          {starter.setup.map((command, i) => (
+            <Command key={i} text={command} />
+          ))}
+          <p className="command-label">Start the project</p>
+          <Command text={starter.run} />
+          {starter.tests.length > 0 && (
+            <>
+              <p className="command-label">Run the tests</p>
+              <Command text={starter.testCommand} />
+              <p className="brief-text command-note">
+                The tests are in {[...new Set(starter.tests.map((test) => test.file))].join(', ')}, and you can add your own.
+                Only stage 1&rsquo;s tests are switched on. Each later group is skipped until you remove its skip marker.
+              </p>
+            </>
+          )}
+        </>
+      )}
+
       <h4 className="brief-heading">Requirements</h4>
       <ol className="brief-list">
         {brief.requirements.map((item, i) => (
@@ -62,19 +117,34 @@ function BriefView({ brief }: SidePanelProps): React.JSX.Element {
 
       <h4 className="brief-heading">Stages</h4>
       <ol className="brief-stages">
-        {brief.stages.map((stage, i) => (
-          <li key={i}>
-            <span className="stage-name">{stage.title}</span>
-            <span className="stage-goal">{stage.goal}</span>
-            {stage.why && <span className="stage-why">Why this stage: {stage.why}</span>}
-            <span className="stage-done-label">Done when</span>
-            <ul className="stage-done">
-              {stage.doneWhen.map((item, j) => (
-                <li key={j}>{item}</li>
-              ))}
-            </ul>
-          </li>
-        ))}
+        {brief.stages.map((stage, i) => {
+          const tests = starter ? starter.tests.filter((test) => test.stage === i + 1) : []
+          return (
+            <li key={i}>
+              <span className="stage-name">{stage.title}</span>
+              <span className="stage-goal">{stage.goal}</span>
+              {stage.why && <span className="stage-why">Why this stage: {stage.why}</span>}
+              <span className="stage-done-label">Done when</span>
+              <ul className="stage-done">
+                {stage.doneWhen.map((item, j) => (
+                  <li key={j}>{item}</li>
+                ))}
+              </ul>
+              {tests.length > 0 && (
+                <>
+                  <span className="stage-done-label">What the tests look at</span>
+                  <ul className="stage-tests">
+                    {tests.map((test) => (
+                      <li key={test.name}>
+                        <code>{test.name}</code> {test.observes}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </li>
+          )
+        })}
       </ol>
     </div>
   )

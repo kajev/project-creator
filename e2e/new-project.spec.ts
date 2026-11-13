@@ -61,6 +61,28 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await expect(guide.locator('.brief-example')).toContainText('Added task 1')
   await expect(guide.locator('.stage-name')).toHaveText(FAKE_BRIEF.stages.map((s) => s.title))
   await expect(guide.locator('.stage-why')).toHaveText(FAKE_BRIEF.stages.map((s) => `Why this stage: ${s.why}`))
+
+  // It also says how to set up, start and test the starter, and what each test looks at, under its stage.
+  await expect(guide.locator('.command code')).toHaveText([...FAKE_STARTER.setup, FAKE_STARTER.run, FAKE_STARTER.testCommand])
+  await expect(guide.locator('.brief-stages > li').nth(0).locator('.stage-tests li')).toHaveText([
+    `${FAKE_STARTER.tests[0].name} ${FAKE_STARTER.tests[0].observes}`
+  ])
+  await expect(guide.locator('.brief-stages > li').nth(1).locator('.stage-tests li')).toHaveText([
+    `${FAKE_STARTER.tests[1].name} ${FAKE_STARTER.tests[1].observes}`
+  ])
+  await expect(guide.locator('.brief-stages > li').nth(2).locator('.stage-tests')).toHaveCount(0)
+
+  // Copy hands the command to the clipboard and says so. The app never runs it. The clipboard call is replaced
+  // here, so running the tests does not wipe whatever you had copied.
+  expect(await win.evaluate(() => window.isSecureContext && typeof navigator.clipboard.writeText === 'function')).toBe(true)
+  await win.evaluate(() => {
+    const copied: string[] = []
+    ;(window as unknown as { copied: string[] }).copied = copied
+    navigator.clipboard.writeText = async (text: string) => void copied.push(text)
+  })
+  await guide.getByRole('button', { name: `Copy: ${FAKE_STARTER.run}` }).click()
+  await expect(guide.getByRole('button', { name: `Copy: ${FAKE_STARTER.run}` })).toHaveText('Copied')
+  expect(await win.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual([FAKE_STARTER.run])
   await expect(guide.locator('.stage-done li')).toHaveText(FAKE_BRIEF.stages.flatMap((s) => s.doneWhen))
   await win.screenshot({ path: shot('new-project-4-opened') })
 

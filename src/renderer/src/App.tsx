@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Brief, CreatedProject, ProjectInfo, TerminalSession } from '@shared/types'
+import type { Brief, CreatedProject, ProjectInfo, StarterInfo, TerminalSession } from '@shared/types'
 import { FileTree } from './components/FileTree'
 import { TabBar, type OpenFile } from './components/TabBar'
 import { EditorPane } from './components/EditorPane'
@@ -48,6 +48,7 @@ export default function App(): React.JSX.Element {
   const [starting, setStarting] = useState(false)
   /** The open project's brief, or null when the folder has none. */
   const [brief, setBrief] = useState<Brief | null>(null)
+  const [starter, setStarter] = useState<StarterInfo | null>(null)
   const [recent, setRecent] = useState<string[]>([])
   const [files, setFiles] = useState<OpenFile[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -81,13 +82,18 @@ export default function App(): React.JSX.Element {
     document.title = project ? `${project.name} - Project Creator` : 'Project Creator'
   }, [project])
 
-  // The Guide panel shows the brief of whichever project is open.
+  // The Guide panel shows the brief of whichever project is open, and how to run its starter when it has one.
   useEffect(() => {
     setBrief(null)
+    setStarter(null)
     if (!project) return
     let cancelled = false
     window.api.project.brief().then(
       (found) => !cancelled && setBrief(found),
+      () => undefined
+    )
+    window.api.project.starter().then(
+      (found) => !cancelled && setStarter(found),
       () => undefined
     )
     return () => {
@@ -332,7 +338,7 @@ export default function App(): React.JSX.Element {
           <>
             <Splitter direction="vertical" label="Resize guide panel" onDrag={(d) => setSizes((s) => ({ ...s, right: clamp(s.right - d, 260, 560) }))} />
             <div className="col-right" style={{ width: sizes.right }}>
-              <SidePanel brief={brief} />
+              <SidePanel brief={brief} starter={starter} />
             </div>
           </>
         )}
