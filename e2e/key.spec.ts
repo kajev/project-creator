@@ -19,7 +19,8 @@ test('the API key is stored encrypted, survives a restart, and is never readable
     'hasKey',
     'proposeProjects',
     'setKey',
-    'writeBrief'
+    'writeBrief',
+    'writeStarter'
   ])
   await first.app.close()
 

@@ -89,6 +89,30 @@ export const FAKE_BRIEF = {
   ]
 }
 
+/** A starter for FAKE_BRIEF: it runs, prints a placeholder, and leaves every stage to the learner. */
+export const FAKE_STARTER = {
+  files: [
+    {
+      path: 'task.py',
+      content:
+        '"""Task tracker. Start it with: python task.py"""\n\n\ndef main():\n    # TODO (stage 1): print a usage line instead of this placeholder\n    print("Task tracker starter")\n\n\nif __name__ == "__main__":\n    main()\n'
+    },
+    {
+      path: 'tests/test_task.py',
+      content:
+        'import subprocess\nimport sys\nimport unittest\n\n\ndef run(*args):\n    return subprocess.run([sys.executable, "task.py", *args], capture_output=True, text=True)\n\n\n# Stage 1: Say hello\nclass Stage1(unittest.TestCase):\n    def test_usage_line(self):\n        self.assertTrue(run().stdout.lower().startswith("usage"))\n\n\n# Stage 2: Add a task. Remove the skip line when you reach this stage.\n@unittest.skip("stage 2")\nclass Stage2(unittest.TestCase):\n    def test_add_prints_id(self):\n        self.assertIn("1", run("add", "Buy milk").stdout)\n'
+    },
+    { path: '.gitignore', content: '__pycache__/\n.venv/\n' }
+  ],
+  setup: ['python -m venv .venv'],
+  run: 'python task.py',
+  testCommand: 'python -m unittest discover tests',
+  tests: [
+    { stage: 1, file: 'tests/test_task.py', name: 'test_usage_line', observes: 'Running the program with no arguments prints a line that starts with "usage".' },
+    { stage: 2, file: 'tests/test_task.py', name: 'test_add_prints_id', observes: 'Adding a task prints the id it was given.' }
+  ]
+}
+
 export interface FakeRequest {
   apiKey: string | undefined
   // The JSON body the SDK sent, as-is.
@@ -110,6 +134,10 @@ export interface FakeAnthropic {
 export const CUT_OFF = 'E2E_CUT_OFF'
 export const REFUSAL = 'E2E_REFUSAL'
 export const WRONG_SHAPE = 'E2E_WRONG_SHAPE'
+/** These three only affect the starter call. The proposals and the brief still come back as usual. */
+export const STARTER_CUT_OFF = 'E2E_STARTER_CUT_OFF'
+export const STARTER_UNSAFE = 'E2E_STARTER_UNSAFE'
+export const STARTER_TOO_BIG = 'E2E_STARTER_TOO_BIG'
 
 /** `delayMs` holds every reply back, to test what happens while the app is waiting. */
 export async function startFakeAnthropic(options: { delayMs?: number } = {}): Promise<FakeAnthropic> {
@@ -139,26 +167,49 @@ export async function startFakeAnthropic(options: { delayMs?: number } = {}): Pr
       return
     }
 
+    const message = { id: 'msg_e2e', type: 'message', role: 'assistant', model: body.model, stop_sequence: null }
+    const usage = { input_tokens: 1, output_tokens: 1 }
+
+    /** The same reply as server-sent events, the way the API answers a request with "stream": true. */
+    const stream = (text: string, stop_reason: string): void => {
+      const half = Math.ceil(text.length / 2)
+      const events: [string, unknown][] = [
+        ['message_start', { message: { ...message, content: [], stop_reason: null, usage } }],
+        ['content_block_start', { index: 0, content_block: { type: 'text', text: '' } }],
+        ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: text.slice(0, half) } }],
+        ['content_block_delta', { index: 0, delta: { type: 'text_delta', text: text.slice(half) } }],
+        ['content_block_stop', { index: 0 }],
+        ['message_delta', { delta: { stop_reason, stop_sequence: null }, usage: { output_tokens: 1 } }],
+        ['message_stop', {}]
+      ]
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+      res.end(events.map(([type, data]) => `event: ${type}\ndata: ${JSON.stringify({ type, ...(data as object) })}\n\n`).join(''), () => served++)
+    }
+
     const reply = (text: string, stop_reason: string): void =>
-      send(200, {
-        id: 'msg_e2e',
-        type: 'message',
-        role: 'assistant',
-        model: body.model,
-        content: [{ type: 'text', text }],
-        stop_reason,
-        stop_sequence: null,
-        usage: { input_tokens: 1, output_tokens: 1 }
-      })
+      body.stream ? stream(text, stop_reason) : send(200, { ...message, content: [{ type: 'text', text }], stop_reason, usage })
 
     const asked = JSON.stringify(body.messages)
     if (asked.includes(CUT_OFF)) return reply('{"proposals": [{"title": "Task Tr', 'max_tokens')
     if (asked.includes(REFUSAL)) return reply('I can not help with that.', 'refusal')
     if (asked.includes(WRONG_SHAPE)) return reply('{"something": "else"}', 'end_turn')
 
-    // The two calls differ in the shape they ask for, so answer by that.
-    const wantsProposals = JSON.stringify(body.output_config ?? {}).includes('proposals')
-    reply(JSON.stringify(wantsProposals ? { proposals: FAKE_PROPOSALS } : FAKE_BRIEF), 'end_turn')
+    // The three calls differ in the shape they ask for, so answer by that.
+    const shape = JSON.stringify(body.output_config ?? {})
+    if (shape.includes('proposals')) return reply(JSON.stringify({ proposals: FAKE_PROPOSALS }), 'end_turn')
+    if (!shape.includes('testCommand')) return reply(JSON.stringify(FAKE_BRIEF), 'end_turn')
+
+    if (asked.includes(STARTER_CUT_OFF)) return reply('{"files": [{"path": "task.py", "content": "print(', 'max_tokens')
+    let starter = FAKE_STARTER
+    if (asked.includes(STARTER_UNSAFE)) starter = { ...starter, files: [...starter.files, { path: '../evil.py', content: 'print("outside")\n' }] }
+    if (asked.includes(STARTER_TOO_BIG)) {
+      starter = { ...starter, files: Array.from({ length: 16 }, (_, i) => ({ path: `file${i}.py`, content: '' })), tests: [] }
+    }
+    // A request that says "Tests: no" gets a starter without them, as the prompt asks.
+    if (asked.includes('Tests: no')) {
+      starter = { ...starter, files: starter.files.filter((file) => !file.path.startsWith('tests/')), testCommand: '', tests: [] }
+    }
+    reply(JSON.stringify(starter), 'end_turn')
   })
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))

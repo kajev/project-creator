@@ -151,8 +151,13 @@ export interface ProjectCreatorApi {
     clearKey(): Promise<void>
     /** Three project ideas that fit the user's answers. */
     proposeProjects(input: ProposalInput): Promise<Proposal[]>
-    /** The full assignment for the idea the user picked. */
-    writeBrief(input: ProposalInput, proposal: Proposal): Promise<Brief>
+    /**
+     * The full assignment for the idea the user picked. With `withStarter`, the brief assumes starter files that
+     * already run, so no stage is about setting the project up.
+     */
+    writeBrief(input: ProposalInput, proposal: Proposal, withStarter?: boolean): Promise<Brief>
+    /** Starter files for a brief, already checked. Rejects when the AI's starter may not be written to disk. */
+    writeStarter(input: ProposalInput, brief: Brief, wantTests: boolean): Promise<Starter>
   }
   terminal: {
     start(cwd: string, cols: number, rows: number): Promise<TerminalSession>

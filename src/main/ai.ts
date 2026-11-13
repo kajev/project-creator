@@ -2,9 +2,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import { ipcMain } from 'electron'
 import { z } from 'zod'
-import type { Brief, Proposal, ProposalInput } from '@shared/types'
+import type { Brief, Proposal, ProposalInput, Starter } from '@shared/types'
 import { BriefSchema, parseWith, ProposalInputSchema, ProposalSchema } from './brief'
 import { clearKey, getKey, hasKey, setKey } from './keyStore'
+import { StarterSchema, validateStarter } from './starter'
 
 const MODEL = 'claude-opus-5-5'
 
@@ -33,6 +34,42 @@ Write these fields:
 - stages: five to ten stages in the order to build them. Each stage is a small working step that builds on the one before, and the first is small enough to finish in the first sitting. Each stage has a title, a goal of one sentence, why, and doneWhen. why is two or three sentences of reasoning: why this stage comes at this point, what it makes possible for the stages after it, and what the learner practises by doing it. It gives reasons, not instructions, so it must not say how to build the stage. doneWhen is two to four checks the learner can see for themselves by running the project.
 
 Keep it short and plain. The learner should be able to read the whole brief in a few minutes.`
+
+/** Added to the brief prompt when starter files will be written for the project. */
+const BRIEF_WITH_STARTER = `The learner starts from starter files that already run, so setup is done for them. No stage is about creating the project, installing anything or getting it to start. Stage 1 is one small visible change to the running starter, so that they read it before they build on it.`
+
+const STARTER_SYSTEM = `You write the starter files for a programming project that a learner will build alone, from the brief in the user message. The starter exists so that setup is not the thing that stops them. It must run as it is, and it must leave every real feature of the project to the learner, because building those is what they learn from.
+
+What the starter is:
+- After the setup commands, the run command starts the project and shows a placeholder: a line of output, a page with only a heading, a window with a title. Nothing more.
+- It has the structure a project like this needs in order to start (an entry point, configuration, a dependency list when there are dependencies) and none of the behaviour in the brief's requirements. Do not build, or half build, any stage.
+- Where the learner's work goes, leave a comment that starts with TODO and names the stage, like "TODO (stage 3): ...". It says in one line what belongs there, never how to write it.
+- Prefer the standard library. Add a dependency only when the brief's stack names it, and use well-known packages by their exact published names.
+- Keep it small: at most 12 files, each short, text only. Paths are relative to the project folder and use forward slashes. Do not write ASSIGNMENT.md or a README. Do not write any file or folder whose name starts with a dot, except .gitignore.
+- If you write a package.json, give it no preinstall, install, postinstall or prepare script.
+
+Commands:
+- setup: what to run once before the first start, in order, one command per entry. Empty when nothing is needed.
+- run: the one command that starts the project.
+- Write every command for the terminal named in the user message. Each command is a single line.
+
+Tests, only when the user message asks for them:
+- Put them in their own file or files, written with the language's built-in test tool when it has one (unittest for Python, node:test for Node.js, go test for Go). If a test tool has to be installed, its install command goes in setup.
+- Write tests for every stage of the brief, grouped by stage in order, with a comment above each group naming its stage.
+- Tests look at the project from the outside. They run the program and read what it prints, request a page and read the response, or call the entry point the starter itself defines. They never depend on names the learner has yet to choose, such as helper functions or files that do not exist yet.
+- The tests for stage 1 are switched on. Every later group is skipped with the test tool's own skip marker, next to a comment telling the learner to remove the marker when they reach that stage.
+- Run against the starter as written, the tests for stage 1 fail because the feature is not built yet. Nothing crashes while the test file loads.
+- testCommand: the one command that runs all the tests.
+- tests: one entry for each test, with its stage number (1 is the first stage), the file it is in, its name exactly as written in that file, and observes: one plain sentence, written for the learner, saying what the test looks at.
+
+When the user message does not ask for tests, write no test files, set testCommand to an empty string and tests to an empty list.`
+
+/** The terminal the learner will type commands into, so the starter's commands fit it. */
+const TERMINALS: Record<string, string> = {
+  win32: 'Windows, with PowerShell as the terminal',
+  darwin: 'macOS, with zsh as the terminal',
+  linux: 'Linux, with bash as the terminal'
+}
 
 const LEVELS: Record<ProposalInput['level'], string> = {
   new: 'new to programming',
@@ -66,11 +103,17 @@ async function explain(err: unknown): Promise<Error> {
   return err instanceof Error ? err : new Error(String(err))
 }
 
-/** One request, one reply, shaped by `schema`. The key never leaves the main process. */
-async function ask<T>(system: string, user: string, schema: z.ZodType<T>): Promise<T> {
+/**
+ * One request, one reply, shaped by `schema`. The key never leaves the main process.
+ *
+ * `long` is for a reply that can run to many files. That request is streamed and collected at the end, which is
+ * what the SDK asks for when the output is long: a plain request can time out while the reply is still being
+ * written.
+ */
+async function ask<T>(system: string, user: string, schema: z.ZodType<T>, long = false): Promise<T> {
   const apiKey = await getKey()
   if (!apiKey) throw new Error('Add your Claude API key first.')
-  const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 })
+  const client = new Anthropic({ apiKey, timeout: long ? 600_000 : 120_000, maxRetries: 1 })
   const format = zodOutputFormat(schema)
   // The shape is also written into the prompt. Claude enforces `format` by itself, but a stand-in server that
   // ignores it (a proxy in front of another model) has only the prompt to go on.
@@ -78,13 +121,17 @@ async function ask<T>(system: string, user: string, schema: z.ZodType<T>): Promi
   try {
     // Not messages.parse: it parses the text before we can look at stop_reason, so a reply that was cut off or
     // declined would surface as a JSON syntax error instead of saying what happened.
-    const message = await client.messages.create({
+    const request = {
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: long ? 64000 : 16000,
       system: shaped,
-      messages: [{ role: 'user', content: user }],
-      output_config: { effort: 'medium', format }
-    })
+      messages: [{ role: 'user' as const, content: user }],
+      // Only the schema goes on the wire. Handing the SDK the whole `format`, with its parse function, makes the
+      // streaming helper parse the text itself, and a cut-off reply then fails as a JSON error before the
+      // stop_reason below can be looked at.
+      output_config: { effort: 'medium' as const, format: { type: format.type, schema: format.schema } }
+    }
+    const message = long ? await client.messages.stream(request).finalMessage() : await client.messages.create(request)
     if (message.stop_reason === 'refusal') {
       throw new Error('Claude declined this request. Try describing what you want differently.')
     }
@@ -107,11 +154,26 @@ export async function proposeProjects(input: ProposalInput): Promise<Proposal[]>
   return proposals.slice(0, 3)
 }
 
-export async function writeBrief(input: ProposalInput, proposal: Proposal): Promise<Brief> {
+export async function writeBrief(input: ProposalInput, proposal: Proposal, withStarter = false): Promise<Brief> {
   const user = `${describeLearner(input)}\n\nThe project they chose:\n${JSON.stringify(proposal, null, 2)}`
-  const brief = await ask(BRIEF_SYSTEM, user, BriefSchema)
+  const brief = await ask(withStarter ? `${BRIEF_SYSTEM}\n\n${BRIEF_WITH_STARTER}` : BRIEF_SYSTEM, user, BriefSchema)
   if (brief.stages.length === 0) throw new Error('The brief came back without any stages. Try again.')
   return brief
+}
+
+/** Starter files for a brief. Checked here, so a starter that may not be written never reaches the UI. */
+export async function writeStarter(input: ProposalInput, brief: Brief, wantTests: boolean): Promise<Starter> {
+  const user = [
+    describeLearner(input),
+    `Their computer: ${TERMINALS[process.platform] ?? 'an unknown system'}`,
+    `Tests: ${wantTests ? 'yes, write them' : 'no'}`,
+    '',
+    'The brief:',
+    JSON.stringify(brief, null, 2)
+  ].join('\n')
+  const starter = validateStarter(await ask(STARTER_SYSTEM, user, StarterSchema, true), brief)
+  if (wantTests && starter.tests.length === 0) throw new Error('The starter came back without tests. Try again.')
+  return starter
 }
 
 export function registerAiHandlers(): void {
@@ -119,7 +181,10 @@ export function registerAiHandlers(): void {
   ipcMain.handle('ai:setKey', (_event, key: string) => setKey(key))
   ipcMain.handle('ai:clearKey', () => clearKey())
   ipcMain.handle('ai:propose', (_event, input: unknown) => proposeProjects(parseWith(ProposalInputSchema, input)))
-  ipcMain.handle('ai:writeBrief', (_event, input: unknown, proposal: unknown) =>
-    writeBrief(parseWith(ProposalInputSchema, input), parseWith(ProposalSchema, proposal))
+  ipcMain.handle('ai:writeBrief', (_event, input: unknown, proposal: unknown, withStarter: unknown) =>
+    writeBrief(parseWith(ProposalInputSchema, input), parseWith(ProposalSchema, proposal), withStarter === true)
+  )
+  ipcMain.handle('ai:writeStarter', (_event, input: unknown, brief: unknown, wantTests: unknown) =>
+    writeStarter(parseWith(ProposalInputSchema, input), parseWith(BriefSchema, brief), wantTests === true)
   )
 }
