@@ -123,12 +123,15 @@ export interface ProjectCreatorApi {
     /** Reopens a folder from the recent list. Rejects if it no longer exists. */
     openRecent(root: string): Promise<ProjectInfo>
     /**
-     * Asks where the new folder should go, creates it with the brief inside, and opens it.
-     * Resolves to null when the user cancels. Rejects if the folder exists and is not empty.
+     * Asks where the new folder should go, creates it with the brief inside, and opens it. With a starter, its
+     * files are written too. Resolves to null when the user cancels. Rejects if the folder exists and is not
+     * empty, or if the starter may not be written: in that case nothing is created.
      */
-    create(brief: Brief): Promise<CreatedProject | null>
+    create(brief: Brief, starter?: Starter | null): Promise<CreatedProject | null>
     /** The brief of the open project, or null when the folder has none. */
     brief(): Promise<Brief | null>
+    /** How to run the open project's starter and what its tests look at, or null when it has no starter. */
+    starter(): Promise<StarterInfo | null>
     recent(): Promise<string[]>
     close(): Promise<void>
   }

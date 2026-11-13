@@ -1,13 +1,15 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path'
-import type { Brief, CreatedProject, DirEntry, ProjectInfo } from '@shared/types'
+import type { Brief, CreatedProject, DirEntry, ProjectInfo, StarterInfo } from '@shared/types'
 import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
 import { checkRelativePath } from './paths'
+import { starterInfo, StarterInfoSchema, StarterSchema, validateStarter } from './starter'
 
 /** Where the app keeps its own data inside a project it created. */
 const APP_DIR = '.project-creator'
 const BRIEF_FILE = 'brief.json'
+const STARTER_FILE = 'starter.json'
 const ASSIGNMENT_FILE = 'ASSIGNMENT.md'
 
 /** Folders that are never worth showing in the tree. */
@@ -130,8 +132,11 @@ export function registerProjectHandlers(): void {
     }
   })
 
-  ipcMain.handle('project:create', async (event, value: unknown): Promise<CreatedProject | null> => {
+  ipcMain.handle('project:create', async (event, value: unknown, starterValue: unknown): Promise<CreatedProject | null> => {
     const brief = parseWith(BriefSchema, value)
+    // The starter came through the UI, so it is checked again here, and before the folder picker opens: a starter
+    // that may not be written is refused while nothing exists on disk yet.
+    const starter = starterValue == null ? null : validateStarter(parseWith(StarterSchema, starterValue), brief)
     const win = BrowserWindow.fromWebContents(event.sender)
     const options = {
       title: 'Choose where to put the new project folder',
@@ -158,8 +163,30 @@ export function registerProjectHandlers(): void {
     const assignmentPath = await insideRoot(join(project.root, ASSIGNMENT_FILE))
     await fs.mkdir(await insideRoot(join(project.root, APP_DIR)), { recursive: true })
     await fs.writeFile(await insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
-    await fs.writeFile(assignmentPath, briefToMarkdown(brief), 'utf8')
+
+    const info = starter ? starterInfo(starter) : undefined
+    if (starter && info) {
+      for (const file of starter.files) {
+        const full = await insideRoot(join(project.root, ...file.path.split('/')))
+        await fs.mkdir(dirname(full), { recursive: true })
+        // "wx" refuses to write over anything. The folder is new, so this only fails if something is badly wrong.
+        await fs.writeFile(full, file.content, { encoding: 'utf8', flag: 'wx' })
+      }
+      await fs.writeFile(await insideRoot(join(project.root, APP_DIR, STARTER_FILE)), JSON.stringify(info, null, 2), 'utf8')
+    }
+    await fs.writeFile(assignmentPath, briefToMarkdown(brief, info), 'utf8')
     return { project, assignmentPath }
+  })
+
+  ipcMain.handle('project:starter', async (): Promise<StarterInfo | null> => {
+    if (!currentRoot) return null
+    try {
+      const raw = await fs.readFile(await insideRoot(join(currentRoot, APP_DIR, STARTER_FILE)), 'utf8')
+      return parseWith(StarterInfoSchema, JSON.parse(raw))
+    } catch {
+      // No starter was written for this project, or the file is unreadable. Either way there is nothing to show.
+      return null
+    }
   })
 
   ipcMain.handle('project:brief', async (): Promise<Brief | null> => {
