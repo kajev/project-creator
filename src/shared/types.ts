@@ -67,6 +67,45 @@ export interface Brief {
   stages: BriefStage[]
 }
 
+/** One file of a starter. */
+export interface StarterFile {
+  /** Relative to the project folder, with forward slashes. */
+  path: string
+  content: string
+}
+
+/** One test in the starter's test files, described for the learner. */
+export interface StarterTest {
+  /** The stage this test belongs to. 1 is the first stage. */
+  stage: number
+  /** The starter file the test is in. */
+  file: string
+  /** The test's name as it appears in that file. */
+  name: string
+  /** One plain sentence: what this test looks at. */
+  observes: string
+}
+
+/** What the AI writes for a new project besides the brief: files that run, and how to run them. */
+export interface Starter {
+  files: StarterFile[]
+  /** Commands to run once, in order. May be empty. The app shows them and never runs them. */
+  setup: string[]
+  /** The command that starts the project. */
+  run: string
+  /** The command that runs the tests. Empty when the starter has no tests. */
+  testCommand: string
+  tests: StarterTest[]
+}
+
+/** What the app keeps about a starter once its files are written: everything except their contents. */
+export interface StarterInfo extends Omit<Starter, 'files'> {
+  files: string[]
+}
+
+/** Which "done when" items are ticked: ticked[stage][item], in the brief's order. */
+export type Progress = boolean[][]
+
 /** A project folder the app just created from a brief. */
 export interface CreatedProject {
   project: ProjectInfo

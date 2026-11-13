@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { Brief, Proposal, ProposalInput } from '@shared/types'
+import type { Brief, Proposal, ProposalInput, StarterInfo } from '@shared/types'
+import { starterToMarkdown } from './starter'
 
 /*
  * Runtime shapes for the types in shared/types.ts. ProposalSchema and
@@ -55,8 +56,8 @@ export function slugify(title: string): string {
   return RESERVED.test(slug) ? `${slug}-project` : slug
 }
 
-/** The text of ASSIGNMENT.md: the brief as the user reads it. */
-export function briefToMarkdown(brief: Brief): string {
+/** The text of ASSIGNMENT.md: the brief as the user reads it, with how to run the starter when there is one. */
+export function briefToMarkdown(brief: Brief, starter?: StarterInfo): string {
   const hours = `about ${brief.estimatedHours} ${brief.estimatedHours === 1 ? 'hour' : 'hours'}`
   const lines = [
     `# ${brief.title}`,
@@ -74,6 +75,7 @@ export function briefToMarkdown(brief: Brief): string {
     '',
     brief.example,
     '',
+    ...(starter ? [starterToMarkdown(starter, brief)] : []),
     '## Stages',
     ''
   ]
