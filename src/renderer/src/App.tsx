@@ -68,6 +68,8 @@ export default function App(): React.JSX.Element {
   dirtyRef.current = dirty
 
   const showError = useCallback((msg: string) => setError(msg), [])
+  /** For errors as they were thrown. Stable, so components can list it in effect dependencies. */
+  const showFailure = useCallback((err: unknown) => setError(errorText(err)), [])
 
   const loadRecent = useCallback(() => {
     window.api.project.recent().then(setRecent).catch(() => setRecent([]))
@@ -310,7 +312,7 @@ export default function App(): React.JSX.Element {
 
       <div className="workbench-main">
         <div className="col-left" style={{ width: sizes.left }}>
-          <FileTree root={project.root} projectName={project.name} activePath={activePath} onOpenFile={openFile} onError={showError} />
+          <FileTree root={project.root} projectName={project.name} activePath={activePath} onOpenFile={openFile} onError={showFailure} />
         </div>
         <Splitter direction="vertical" label="Resize file panel" onDrag={(d) => setSizes((s) => ({ ...s, left: clamp(s.left + d, 180, 520) }))} />
 

@@ -97,6 +97,13 @@ export interface ProjectCreatorApi {
     readDir(dir: string): Promise<DirEntry[]>
     readFile(file: string): Promise<string>
     writeFile(file: string, content: string): Promise<void>
+    /**
+     * Creates an empty file at a path relative to the project folder, such as "templates/index.html", making any
+     * missing folders. Resolves to the full path. Rejects if the name is unsafe or already exists.
+     */
+    createFile(path: string): Promise<string>
+    /** The same for a folder. */
+    createDir(path: string): Promise<string>
   }
   ai: {
     hasKey(): Promise<boolean>

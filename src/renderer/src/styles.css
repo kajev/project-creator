@@ -564,6 +564,15 @@ textarea.input {
   margin-left: 0;
   color: var(--text-faint);
 }
+.tree-new {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.tree-new .input {
+  padding: 4px 8px;
+  font-size: var(--text-sm);
+}
 .tree-note {
   padding: 6px 12px;
   font-size: var(--text-sm);

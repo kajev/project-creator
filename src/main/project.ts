@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path'
 import type { Brief, CreatedProject, DirEntry, ProjectInfo } from '@shared/types'
 import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
+import { checkRelativePath } from './paths'
 
 /** Where the app keeps its own data inside a project it created. */
 const APP_DIR = '.project-creator'
@@ -79,6 +80,35 @@ async function setRoot(root: string): Promise<ProjectInfo> {
 
 export function getCurrentRoot(): string | null {
   return currentRoot
+}
+
+/**
+ * Creates an empty file or a folder at a path the user typed, relative to the project folder. Missing folders on
+ * the way are created. Returns the full path. Nothing that already exists is touched.
+ */
+async function createEntry(typed: unknown, kind: 'file' | 'dir'): Promise<string> {
+  if (!currentRoot) throw new Error('Open a project folder first.')
+  // A slash at the end is how people say "this is a folder", so it is not counted as an empty name.
+  const rel = checkRelativePath(typeof typed === 'string' ? typed.trim().replace(/[\\/]+$/, '') : '')
+  if (rel.split('/')[0].toLowerCase() === APP_DIR) throw new Error(`${APP_DIR} is kept for the app's own files.`)
+
+  const full = await insideRoot(join(currentRoot, rel))
+  const exists = await fs.stat(full).then(
+    () => true,
+    () => false
+  )
+  if (exists) throw new Error(`"${rel}" already exists.`)
+
+  try {
+    await fs.mkdir(kind === 'dir' ? full : dirname(full), { recursive: true })
+    // "wx" fails instead of overwriting, in case the file appeared since the check above.
+    if (kind === 'file') await fs.writeFile(full, '', { flag: 'wx' })
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'EEXIST' || code === 'ENOTDIR') throw new Error(`"${rel}" can't be created because a file is in the way.`)
+    throw err
+  }
+  return full
 }
 
 export function registerProjectHandlers(): void {
@@ -176,4 +206,7 @@ export function registerProjectHandlers(): void {
     const full = await insideRoot(file)
     await fs.writeFile(full, content, 'utf8')
   })
+
+  ipcMain.handle('fs:createFile', (_event, path: unknown) => createEntry(path, 'file'))
+  ipcMain.handle('fs:createDir', (_event, path: unknown) => createEntry(path, 'dir'))
 }

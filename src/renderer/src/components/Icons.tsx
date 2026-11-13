@@ -19,6 +19,24 @@ export function FileIcon({ className }: IconProps): React.JSX.Element {
   )
 }
 
+export function NewFileIcon({ className }: IconProps): React.JSX.Element {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path d="M7.5 12.5H2v-11h5l3 3V7" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M10.5 9v4M8.5 11h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function NewFolderIcon({ className }: IconProps): React.JSX.Element {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path d="M7 11.5H1.5v-9h4l1.2 1.5h5.8V7" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M10.5 9v4M8.5 11h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function RefreshIcon({ className }: IconProps): React.JSX.Element {
   return (
     <svg className={className} width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">

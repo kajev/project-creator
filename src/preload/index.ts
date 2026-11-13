@@ -14,7 +14,9 @@ const api: ProjectCreatorApi = {
   fs: {
     readDir: (dir) => ipcRenderer.invoke('fs:readDir', dir),
     readFile: (file) => ipcRenderer.invoke('fs:readFile', file),
-    writeFile: (file, content) => ipcRenderer.invoke('fs:writeFile', file, content)
+    writeFile: (file, content) => ipcRenderer.invoke('fs:writeFile', file, content),
+    createFile: (path) => ipcRenderer.invoke('fs:createFile', path),
+    createDir: (path) => ipcRenderer.invoke('fs:createDir', path)
   },
   ai: {
     hasKey: () => ipcRenderer.invoke('ai:hasKey'),
