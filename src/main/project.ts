@@ -1,6 +1,6 @@
 import { app, dialog, ipcMain, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
-import { basename, join, relative, resolve, isAbsolute, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'node:path'
 import type { Brief, CreatedProject, DirEntry, ProjectInfo } from '@shared/types'
 import { BriefSchema, briefToMarkdown, parseWith, slugify } from './brief'
 
@@ -34,22 +34,42 @@ async function rememberRecent(root: string): Promise<void> {
   await fs.writeFile(recentFile(), JSON.stringify(list, null, 2), 'utf8')
 }
 
+/** True when `full` is `root` itself or somewhere below it. Compares path text only. */
+function contains(root: string, full: string): boolean {
+  const rel = relative(root, full)
+  return !(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))
+}
+
 /**
  * Every file request from the UI goes through here, so the renderer can only
  * touch files inside the folder the user opened.
  */
-function insideRoot(target: string): string {
+async function insideRoot(target: string): Promise<string> {
   if (!currentRoot) throw new Error('Open a project folder first.')
+  const blocked = new Error(`Blocked access outside the project: ${target}`)
   const full = resolve(target)
-  const rel = relative(currentRoot, full)
-  if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-    throw new Error(`Blocked access outside the project: ${target}`)
+  if (!contains(currentRoot, full)) throw blocked
+
+  // The text of the path is inside the project, but a folder link along the way could still lead out of it. So find
+  // the deepest part of the path that exists and check where it really is. The walk ends at the project folder.
+  let existing = full
+  for (;;) {
+    let real: string
+    try {
+      real = await fs.realpath(existing)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT' || existing === currentRoot) throw err
+      existing = dirname(existing)
+      continue
+    }
+    if (!contains(currentRoot, real)) throw blocked
+    return full
   }
-  return full
 }
 
 async function setRoot(root: string): Promise<ProjectInfo> {
-  const full = resolve(root)
+  // The real location, with any links resolved, so insideRoot compares like with like.
+  const full = await fs.realpath(resolve(root))
   const stat = await fs.stat(full)
   if (!stat.isDirectory()) throw new Error(`${full} is not a folder.`)
   currentRoot = full
@@ -105,9 +125,9 @@ export function registerProjectHandlers(): void {
     await fs.mkdir(dir, { recursive: true })
     const project = await setRoot(dir)
     // From here on the new folder is the open project, so every write goes through insideRoot.
-    const assignmentPath = insideRoot(join(project.root, ASSIGNMENT_FILE))
-    await fs.mkdir(insideRoot(join(project.root, APP_DIR)), { recursive: true })
-    await fs.writeFile(insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
+    const assignmentPath = await insideRoot(join(project.root, ASSIGNMENT_FILE))
+    await fs.mkdir(await insideRoot(join(project.root, APP_DIR)), { recursive: true })
+    await fs.writeFile(await insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
     await fs.writeFile(assignmentPath, briefToMarkdown(brief), 'utf8')
     return { project, assignmentPath }
   })
@@ -115,7 +135,7 @@ export function registerProjectHandlers(): void {
   ipcMain.handle('project:brief', async (): Promise<Brief | null> => {
     if (!currentRoot) return null
     try {
-      const raw = await fs.readFile(insideRoot(join(currentRoot, APP_DIR, BRIEF_FILE)), 'utf8')
+      const raw = await fs.readFile(await insideRoot(join(currentRoot, APP_DIR, BRIEF_FILE)), 'utf8')
       return parseWith(BriefSchema, JSON.parse(raw))
     } catch {
       // No brief here, or the file was edited into something unreadable. Either way the folder has no brief.
@@ -130,7 +150,7 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle('fs:readDir', async (_event, dir: string): Promise<DirEntry[]> => {
-    const full = insideRoot(dir)
+    const full = await insideRoot(dir)
     const entries = await fs.readdir(full, { withFileTypes: true })
     return entries
       .filter((e) => !HIDDEN.has(e.name))
@@ -139,7 +159,7 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle('fs:readFile', async (_event, file: string): Promise<string> => {
-    const full = insideRoot(file)
+    const full = await insideRoot(file)
     const stat = await fs.stat(full)
     if (stat.size > MAX_FILE_BYTES) {
       throw new Error(`${basename(full)} is larger than 5 MB, so it won't open in the editor.`)
@@ -153,7 +173,7 @@ export function registerProjectHandlers(): void {
   })
 
   ipcMain.handle('fs:writeFile', async (_event, file: string, content: string): Promise<void> => {
-    const full = insideRoot(file)
+    const full = await insideRoot(file)
     await fs.writeFile(full, content, 'utf8')
   })
 }
