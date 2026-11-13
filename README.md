@@ -82,7 +82,8 @@ What works:
   projects, and choose a folder. The app writes the brief there and opens it.
 - **Starter files.** After the brief, the AI writes a small starter that runs as it is, with a TODO for each stage
   and a test file. Two switches on the questions form turn the starter and the tests off. If the starter cannot be
-  written, the brief is kept and you can try again or continue without it.
+  written, the brief is kept and you can try again. You can also continue without it, and the brief is then written
+  once more to fit an empty folder.
 - **Guide panel** with the open project's brief: summary, requirements, an example, and the stages, each with its
   reasoning and "done when" items. With a starter it also lists the setup, run and test commands, each with a Copy
   button, and what each test looks at. Every "done when" item is a checkbox, the ticks are saved with the project,
@@ -206,13 +207,15 @@ inside the project that leads elsewhere is rejected too. Terminals are started i
 
 Files the AI writes are checked in the main process before anything touches the disk (`validateStarter` in
 `src/main/starter.ts`). A path is refused if it leaves the project, starts at a drive or network share, uses a name
-or character Windows reserves, starts with a dot (except `.gitignore`), or collides with another file. There are
-limits on how many files and how large. A `package.json` with a script that `npm install` would run is refused. A
-starter that breaks any rule is refused as a whole, never repaired, and files are created so that nothing is
-overwritten.
+or character Windows reserves, starts with a dot (except `.gitignore`), is a Windows short name such as `PROJEC~1`,
+or collides with another file. There are limits on how many files and how large. A `package.json` is refused if it
+has a script that `npm install` would run or is not plain JSON, and so is a `binding.gyp`. A starter that breaks
+any rule is refused as a whole, never repaired. Files are created so that nothing is overwritten, and if writing
+fails partway the new folder is removed again.
 
 The app never runs a command the AI wrote. Setup, run and test commands are shown for you to copy, and a command
-with a line break in it is refused, because pasting it would run the first part at once.
+with a line break in it is refused, because pasting it would run the first part at once. That holds for a saved
+`starter.json` too, which may arrive with a folder from someone else.
 
 The Claude API key is typed into the app once. It goes from the UI to the main process, is encrypted by the operating
 system (DPAPI on Windows) and saved in the app's settings folder. Nothing sends it back to the UI, and all requests

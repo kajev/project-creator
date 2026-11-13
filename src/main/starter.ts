@@ -21,11 +21,16 @@ export const StarterSchema = z.object({
 /** The shape of .project-creator/starter.json. */
 export const StarterInfoSchema = z.object({ files: z.array(z.string()), ...shared }) satisfies z.ZodType<StarterInfo>
 
-/** npm runs these scripts during "npm install", so a starter's package.json may not define them. */
-const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepare']
+/** npm runs all of these scripts during "npm install", so a starter's package.json may not define any of them. */
+const LIFECYCLE = ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare']
 
 // A command is shown for the user to copy. A line break in it would run the first part the moment it is pasted.
 const CONTROL = /[\u0000-\u001f\u007f]/
+
+/** True when a command could not safely be shown for copying. Also used on a starter.json read back from disk. */
+export function hasUnsafeCommand(commands: string[]): boolean {
+  return commands.some((command) => CONTROL.test(command))
+}
 
 const kb = (bytes: number): string => `${Math.round(bytes / 1024)} KB`
 
@@ -42,7 +47,7 @@ export function validateStarter(starter: Starter, brief: Brief): Starter {
 
   const files = starter.files.map((file) => {
     try {
-      return { path: checkRelativePath(file.path, { noDotNames: true }), content: file.content }
+      return { path: checkRelativePath(file.path, { fromAI: true }), content: file.content }
     } catch (err) {
       // Say whose path this is: the user typed nothing, the AI wrote it.
       throw new Error(`The starter was refused. ${(err as Error).message}`)
@@ -50,7 +55,8 @@ export function validateStarter(starter: Starter, brief: Brief): Starter {
   })
   let total = 0
   for (const file of files) {
-    if (file.path.toLowerCase() === 'assignment.md') throw new Error('The starter tries to replace ASSIGNMENT.md.')
+    // As a file it would replace the assignment. As a folder it would stop the assignment being written.
+    if (file.path.split('/')[0].toLowerCase() === 'assignment.md') throw new Error('The starter tries to replace ASSIGNMENT.md.')
     if (file.content.includes('\u0000')) throw new Error(`${file.path} in the starter is not a text file.`)
     const bytes = Buffer.byteLength(file.content, 'utf8')
     if (bytes > MAX_STARTER_FILE_BYTES) {
@@ -74,12 +80,17 @@ export function validateStarter(starter: Starter, brief: Brief): Starter {
   }
 
   for (const file of files) {
-    if (file.path.split('/').pop()!.toLowerCase() !== 'package.json') continue
+    const name = file.path.split('/').pop()!.toLowerCase()
+    // With this file present and no install script, npm runs "node-gyp rebuild" during install.
+    if (name === 'binding.gyp') throw new Error(`${file.path} in the starter would make npm build native code during install.`)
+    if (name !== 'package.json') continue
     let scripts: unknown
     try {
-      scripts = (JSON.parse(file.content) as { scripts?: unknown }).scripts
+      scripts = (JSON.parse(file.content) as { scripts?: unknown } | null)?.scripts
     } catch {
-      continue // Not valid JSON, so npm cannot run anything from it.
+      // npm is more forgiving than JSON.parse (it drops a leading byte order mark, for one), so a file this check
+      // cannot read is not a file npm cannot read. Refuse it instead of guessing.
+      throw new Error(`${file.path} in the starter is not valid JSON.`)
     }
     const table = scripts && typeof scripts === 'object' ? (scripts as Record<string, unknown>) : null
     const risky = table ? LIFECYCLE.find((name) => name in table) : undefined
@@ -90,7 +101,7 @@ export function validateStarter(starter: Starter, brief: Brief): Starter {
   const run = starter.run.trim()
   const testCommand = starter.testCommand.trim()
   if (run === '') throw new Error('The starter does not say how to start the project.')
-  if ([...setup, run, testCommand].some((command) => CONTROL.test(command))) {
+  if (hasUnsafeCommand([...setup, run, testCommand])) {
     throw new Error('A command in the starter has a line break or control character in it.')
   }
 

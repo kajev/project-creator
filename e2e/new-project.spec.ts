@@ -177,11 +177,16 @@ test('a starter that is refused keeps the brief: try again, or continue without 
   await expect(win.getByRole('button', { name: 'Continue without starter files' })).toBeEnabled()
   expect(readdirSync(parent)).toEqual([])
 
-  // Continuing makes the project from the brief alone.
+  // Continuing writes the brief once more, this time for an empty folder: the one on hand has no setup stage and
+  // tells the learner to change a starter that will not be there.
   await win.getByRole('button', { name: 'Continue without starter files' }).click()
   await expect(win.locator('.app-project')).toHaveText('task-tracker-cli')
   await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
-  expect(fake.requests).toHaveLength(4)
+  expect(fake.requests).toHaveLength(5)
+  expect(fake.requests[1].body.system).toContain('starter files that already run')
+  expect(JSON.stringify(fake.requests[4].body.output_config)).not.toContain('testCommand')
+  expect(fake.requests[4].body.system).not.toContain('starter files that already run')
+  expect(JSON.stringify(fake.requests[4].body.messages)).toContain(FAKE_PROPOSALS[0].title)
 
   await closeApp(app, win)
   await fake.close()

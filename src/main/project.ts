@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, resolve, isAbsolute, sep } from 'nod
 import type { Brief, CreatedProject, DirEntry, Progress, ProjectInfo, StarterInfo } from '@shared/types'
 import { BriefSchema, briefToMarkdown, parseWith, ProgressSchema, slugify } from './brief'
 import { checkRelativePath } from './paths'
-import { starterInfo, StarterInfoSchema, StarterSchema, validateStarter } from './starter'
+import { hasUnsafeCommand, starterInfo, StarterInfoSchema, StarterSchema, validateStarter } from './starter'
 
 /** Where the app keeps its own data inside a project it created. */
 const APP_DIR = '.project-creator'
@@ -38,6 +38,11 @@ async function rememberRecent(root: string): Promise<void> {
   await fs.writeFile(recentFile(), JSON.stringify(list, null, 2), 'utf8')
 }
 
+async function forgetRecent(root: string): Promise<void> {
+  const list = (await loadRecent()).filter((p) => p !== root)
+  await fs.writeFile(recentFile(), JSON.stringify(list, null, 2), 'utf8')
+}
+
 /** True when `full` is `root` itself or somewhere below it. Compares path text only. */
 function contains(root: string, full: string): boolean {
   const rel = relative(root, full)
@@ -63,6 +68,13 @@ async function insideRoot(target: string): Promise<string> {
       real = await fs.realpath(existing)
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT' || existing === currentRoot) throw err
+      // "Not found" has two meanings: nothing is here yet, or a link is here and its target is missing. Writing
+      // to the second kind would create the target, wherever it points, so it is blocked.
+      const isLink = await fs.lstat(existing).then(
+        () => true,
+        () => false
+      )
+      if (isLink) throw blocked
       existing = dirname(existing)
       continue
     }
@@ -127,8 +139,7 @@ export function registerProjectHandlers(): void {
     try {
       return await setRoot(root)
     } catch {
-      const list = (await loadRecent()).filter((p) => p !== root)
-      await fs.writeFile(recentFile(), JSON.stringify(list, null, 2), 'utf8')
+      await forgetRecent(root)
       throw new Error(`Couldn't open ${root}. It may have been moved or deleted, so it was removed from your recent list.`)
     }
   })
@@ -160,30 +171,43 @@ export function registerProjectHandlers(): void {
 
     await fs.mkdir(dir, { recursive: true })
     const project = await setRoot(dir)
-    // From here on the new folder is the open project, so every write goes through insideRoot.
-    const assignmentPath = await insideRoot(join(project.root, ASSIGNMENT_FILE))
-    await fs.mkdir(await insideRoot(join(project.root, APP_DIR)), { recursive: true })
-    await fs.writeFile(await insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
+    try {
+      // From here on the new folder is the open project, so every write goes through insideRoot.
+      const assignmentPath = await insideRoot(join(project.root, ASSIGNMENT_FILE))
+      await fs.mkdir(await insideRoot(join(project.root, APP_DIR)), { recursive: true })
+      await fs.writeFile(await insideRoot(join(project.root, APP_DIR, BRIEF_FILE)), JSON.stringify(brief, null, 2), 'utf8')
 
-    const info = starter ? starterInfo(starter) : undefined
-    if (starter && info) {
-      for (const file of starter.files) {
-        const full = await insideRoot(join(project.root, ...file.path.split('/')))
-        await fs.mkdir(dirname(full), { recursive: true })
-        // "wx" refuses to write over anything. The folder is new, so this only fails if something is badly wrong.
-        await fs.writeFile(full, file.content, { encoding: 'utf8', flag: 'wx' })
+      const info = starter ? starterInfo(starter) : undefined
+      if (starter && info) {
+        for (const file of starter.files) {
+          const full = await insideRoot(join(project.root, ...file.path.split('/')))
+          await fs.mkdir(dirname(full), { recursive: true })
+          // "wx" refuses to write over anything. The folder is new, so this only fails if something is badly wrong.
+          await fs.writeFile(full, file.content, { encoding: 'utf8', flag: 'wx' })
+        }
+        await fs.writeFile(await insideRoot(join(project.root, APP_DIR, STARTER_FILE)), JSON.stringify(info, null, 2), 'utf8')
       }
-      await fs.writeFile(await insideRoot(join(project.root, APP_DIR, STARTER_FILE)), JSON.stringify(info, null, 2), 'utf8')
+      await fs.writeFile(assignmentPath, briefToMarkdown(brief, info), 'utf8')
+      return { project, assignmentPath }
+    } catch (err) {
+      // A project that is only partly written is worse than none: it looks finished and is not. The folder was
+      // empty or missing a moment ago, so everything in it is ours to take away again.
+      currentRoot = null
+      await forgetRecent(project.root).catch(() => undefined)
+      await fs.rm(project.root, { recursive: true, force: true }).catch(() => undefined)
+      throw new Error(`The project could not be written, so nothing was kept. ${err instanceof Error ? err.message : String(err)}`)
     }
-    await fs.writeFile(assignmentPath, briefToMarkdown(brief, info), 'utf8')
-    return { project, assignmentPath }
   })
 
   ipcMain.handle('project:starter', async (): Promise<StarterInfo | null> => {
     if (!currentRoot) return null
     try {
       const raw = await fs.readFile(await insideRoot(join(currentRoot, APP_DIR, STARTER_FILE)), 'utf8')
-      return parseWith(StarterInfoSchema, JSON.parse(raw))
+      const info = parseWith(StarterInfoSchema, JSON.parse(raw))
+      // The file may have come with a folder from someone else, so the rule for commands is applied again: one
+      // with a line break is not shown, because pasting it would run the first part at once.
+      if (hasUnsafeCommand([...info.setup, info.run, info.testCommand])) return null
+      return info
     } catch {
       // No starter was written for this project, or the file is unreadable. Either way there is nothing to show.
       return null

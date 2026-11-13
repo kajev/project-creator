@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FAKE_BRIEF, FAKE_STARTER } from './fake-anthropic'
 import { launchApp, pickFolder, tempDir } from './launch'
@@ -38,6 +38,50 @@ test('creating a project with a starter writes its files, and says how to run th
   await app.close()
 })
 
+test('if writing fails partway, the half-made project is removed', async () => {
+  const { app, win } = await launchApp()
+  const parent = tempDir('pc-e2e-projects-')
+  await pickFolder(app, parent)
+  // Make one write fail after the brief and the starter files are already on disk.
+  await app.evaluate(() => {
+    const fs = (process as unknown as { mainModule: { require(id: string): typeof import('node:fs') } }).mainModule.require('node:fs').promises
+    const real = fs.writeFile
+    fs.writeFile = ((file: unknown, ...rest: unknown[]) => {
+      if (String(file).endsWith('starter.json')) return Promise.reject(new Error('simulated: the disk is full'))
+      return (real as (...args: unknown[]) => Promise<void>)(file, ...rest)
+    }) as typeof fs.writeFile
+  })
+
+  const error = await win.evaluate(
+    ([brief, starter]) => window.api.project.create(brief, starter).then(() => 'created', (e: Error) => e.message),
+    [FAKE_BRIEF, FAKE_STARTER] as const
+  )
+  expect(error).toContain('The project could not be written, so nothing was kept.')
+  expect(error).toContain('simulated: the disk is full')
+  // Nothing is left: no folder, no open project, no entry in the recent list.
+  expect(readdirSync(parent)).toEqual([])
+  expect(await win.evaluate(() => window.api.project.brief())).toBeNull()
+  expect(await win.evaluate(() => window.api.project.recent())).toEqual([])
+
+  await app.close()
+})
+
+test('a saved starter whose command has a line break is not shown', async () => {
+  const { app, win } = await launchApp()
+  const parent = tempDir('pc-e2e-projects-')
+  await pickFolder(app, parent)
+  const created = await win.evaluate(([brief, starter]) => window.api.project.create(brief, starter), [FAKE_BRIEF, FAKE_STARTER] as const)
+  const file = join(created!.project.root, '.project-creator', 'starter.json')
+  expect(await win.evaluate(() => window.api.project.starter())).not.toBeNull()
+
+  // The file can arrive with a folder from someone else. Pasting this command would run its first line at once.
+  const info = JSON.parse(readFileSync(file, 'utf8'))
+  writeFileSync(file, JSON.stringify({ ...info, run: 'python task.py\necho second command' }))
+  expect(await win.evaluate(() => window.api.project.starter())).toBeNull()
+
+  await app.close()
+})
+
 // A starter that breaks a rule is refused as a whole, before anything is written.
 const REFUSED_STARTERS = [
   {
@@ -54,6 +98,24 @@ const REFUSED_STARTERS = [
     how: 'a settings folder that tools run things from',
     starter: { ...FAKE_STARTER, files: [...FAKE_STARTER.files, { path: '.vscode/settings.json', content: '{}' }] },
     expected: 'names that start with a dot are not allowed here'
+  },
+  {
+    how: 'a file inside a folder named like the assignment',
+    starter: { ...FAKE_STARTER, files: [...FAKE_STARTER.files, { path: 'ASSIGNMENT.md/notes.txt', content: 'x' }] },
+    expected: 'The starter tries to replace ASSIGNMENT.md.'
+  },
+  {
+    how: "a short name for the app's own folder",
+    starter: { ...FAKE_STARTER, files: [...FAKE_STARTER.files, { path: 'PROJEC~1/progress.json', content: '[[true]]' }] },
+    expected: 'Windows short name'
+  },
+  {
+    how: 'an install script hidden behind a byte order mark',
+    starter: {
+      ...FAKE_STARTER,
+      files: [...FAKE_STARTER.files, { path: 'package.json', content: '﻿{"scripts":{"postinstall":"node x.js"}}' }]
+    },
+    expected: 'package.json in the starter is not valid JSON.'
   },
   { how: 'the wrong shape', starter: { files: 'not a list' }, expected: '' }
 ]

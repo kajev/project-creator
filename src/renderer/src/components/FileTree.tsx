@@ -22,7 +22,7 @@ interface FileTreeProps extends TreeContextValue {
 }
 
 export function FileTree({ root, projectName, activePath, onOpenFile, onError }: FileTreeProps): React.JSX.Element {
-  // Bumping the key remounts the tree, which re-reads every expanded folder.
+  // Bumping the key remounts the tree: the top level is read again and open folders close.
   const [refreshKey, setRefreshKey] = useState(0)
   /** What the name field is making, or null when it is closed. */
   const [creating, setCreating] = useState<'file' | 'dir' | null>(null)

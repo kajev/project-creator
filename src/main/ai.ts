@@ -46,7 +46,7 @@ What the starter is:
 - Where the learner's work goes, leave a comment that starts with TODO and names the stage, like "TODO (stage 3): ...". It says in one line what belongs there, never how to write it.
 - Prefer the standard library. Add a dependency only when the brief's stack names it, and use well-known packages by their exact published names.
 - Keep it small: at most 12 files, each short, text only. Paths are relative to the project folder and use forward slashes. Do not write ASSIGNMENT.md or a README. Do not write any file or folder whose name starts with a dot, except .gitignore.
-- If you write a package.json, give it no preinstall, install, postinstall or prepare script.
+- If you write a package.json, it must be plain JSON and have none of the scripts npm runs during install: preinstall, install, postinstall, prepublish, preprepare, prepare, postprepare. Do not write a binding.gyp file.
 
 Commands:
 - setup: what to run once before the first start, in order, one command per entry. Empty when nothing is needed.

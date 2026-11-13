@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { launchApp, tempDir } from './launch'
 
@@ -35,6 +35,29 @@ test('a folder link that leads out of the project cannot be read, listed or writ
 
   // Ordinary folders still work.
   expect(await win.evaluate((file) => window.api.fs.readFile(file), join(root, 'real', 'inside.txt'))).toBe('inside the project')
+
+  await app.close()
+})
+
+test('a folder link whose target is missing cannot be written through, which would create the target', async () => {
+  const root = tempDir('pc-e2e-root-')
+  const missing = join(tempDir('pc-e2e-outside-'), 'not-made-yet')
+  symlinkSync(missing, join(root, 'dangling'), 'junction')
+
+  const { app, win } = await launchApp()
+  await win.evaluate((dir) => window.api.project.openRecent(dir), root)
+
+  // New file would make any missing folders on the way, and here that means the link's target.
+  const created = await win.evaluate(() => window.api.fs.createFile('dangling/new.txt').then(() => null, (e: Error) => e.message))
+  expect(created).toContain('Blocked access outside the project')
+  const folder = await win.evaluate(() => window.api.fs.createDir('dangling/sub').then(() => null, (e: Error) => e.message))
+  expect(folder).toContain('Blocked access outside the project')
+  const written = await win.evaluate(
+    (file) => window.api.fs.writeFile(file, 'x').then(() => null, (e: Error) => e.message),
+    join(root, 'dangling', 'new.txt')
+  )
+  expect(written).toContain('Blocked access outside the project')
+  expect(existsSync(missing)).toBe(false)
 
   await app.close()
 })

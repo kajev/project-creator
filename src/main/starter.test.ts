@@ -61,8 +61,17 @@ describe('validateStarter', () => {
     }
   })
 
-  it('refuses a starter that tries to replace the assignment', () => {
+  it('refuses a starter that tries to replace the assignment, as a file or as a folder', () => {
     expect(() => validateStarter(withFiles([{ path: 'assignment.MD', content: '' }]), brief)).toThrow('replace ASSIGNMENT.md')
+    expect(() => validateStarter(withFiles([{ path: 'ASSIGNMENT.md/notes.txt', content: '' }]), brief)).toThrow('replace ASSIGNMENT.md')
+    // Only at the top: a file of that name in a folder of its own is no threat to the real one.
+    expect(() => validateStarter(withFiles([{ path: 'docs/ASSIGNMENT.md', content: '' }]), brief)).not.toThrow()
+  })
+
+  it("refuses a Windows short name that could stand for the app's own folder", () => {
+    for (const path of ['PROJEC~1/brief.json', 'PROJEC~1/progress.json', 'GIT~1/config']) {
+      expect(() => validateStarter(withFiles([{ path, content: '' }]), brief), path).toThrow('Windows short name')
+    }
   })
 
   it('refuses a file that is too large, a total that is too large, and a file that is not text', () => {
@@ -87,13 +96,24 @@ describe('validateStarter', () => {
   })
 
   it('refuses a package.json with a script npm runs on install, in any folder', () => {
-    for (const script of ['preinstall', 'install', 'postinstall', 'prepare']) {
+    for (const script of ['preinstall', 'install', 'postinstall', 'prepublish', 'preprepare', 'prepare', 'postprepare']) {
       const content = JSON.stringify({ name: 'x', scripts: { start: 'node index.js', [script]: 'node setup.js' } })
       expect(() => validateStarter(withFiles([{ path: 'web/package.json', content }]), brief), script).toThrow(`has a "${script}" script`)
     }
     const fine = JSON.stringify({ name: 'x', scripts: { start: 'node index.js', test: 'node --test' } })
     expect(() => validateStarter(withFiles([{ path: 'package.json', content: fine }]), brief)).not.toThrow()
-    expect(() => validateStarter(withFiles([{ path: 'package.json', content: 'not json' }]), brief)).not.toThrow()
+    expect(() => validateStarter(withFiles([{ path: 'package.json', content: '{"name": "x"}' }]), brief)).not.toThrow()
+  })
+
+  it('refuses a package.json it cannot read, because npm may still be able to', () => {
+    // npm drops a leading byte order mark before parsing. JSON.parse does not, so this used to slip through.
+    const hidden = '﻿' + JSON.stringify({ scripts: { postinstall: 'node setup.js' } })
+    expect(() => validateStarter(withFiles([{ path: 'package.json', content: hidden }]), brief)).toThrow('is not valid JSON')
+    expect(() => validateStarter(withFiles([{ path: 'package.json', content: 'not json' }]), brief)).toThrow('is not valid JSON')
+  })
+
+  it('refuses binding.gyp, which makes npm build native code on install', () => {
+    expect(() => validateStarter(withFiles([{ path: 'binding.gyp', content: '{}' }]), brief)).toThrow('build native code during install')
   })
 
   it('refuses a missing run command, and commands with a line break', () => {

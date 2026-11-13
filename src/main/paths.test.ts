@@ -43,7 +43,7 @@ describe('checkRelativePath', () => {
   })
 
   it('refuses Windows device names in any folder, with or without an extension', () => {
-    for (const bad of ['CON', 'a/CON.txt', 'nul', 'Aux.py', 'src/com1/x', 'LPT9.log']) {
+    for (const bad of ['CON', 'a/CON.txt', 'nul', 'Aux.py', 'src/com1/x', 'LPT9.log', 'nul .txt', 'con  .py', 'COM¹.txt', 'LPT²', 'CONIN$', 'conout$.log']) {
       expect(() => checkRelativePath(bad), bad).toThrow('Windows reserves the name')
     }
     // Only the whole name counts: these merely contain a device name.
@@ -56,12 +56,21 @@ describe('checkRelativePath', () => {
     expect(() => checkRelativePath('a/')).toThrow('empty name')
   })
 
-  it('allows dot names by default, and refuses them when asked, except .gitignore', () => {
+  it('allows dot names from the user, and refuses them from the AI, except .gitignore', () => {
     expect(checkRelativePath('.env')).toBe('.env')
     for (const bad of ['.vscode/settings.json', '.git/hooks/pre-commit', '.github/workflows/ci.yml', 'src/.hidden']) {
-      expect(() => checkRelativePath(bad, { noDotNames: true }), bad).toThrow('start with a dot')
+      expect(() => checkRelativePath(bad, { fromAI: true }), bad).toThrow('start with a dot')
     }
-    expect(checkRelativePath('.gitignore', { noDotNames: true })).toBe('.gitignore')
+    expect(checkRelativePath('.gitignore', { fromAI: true })).toBe('.gitignore')
+  })
+
+  it('refuses Windows short names from the AI, which are another spelling of a dot folder', () => {
+    // On a disk with short names, PROJEC~1 is .project-creator and GIT~1 is .git.
+    for (const bad of ['PROJEC~1/brief.json', 'GIT~1/hooks/pre-commit', 'src/VSCODE~2/settings.json']) {
+      expect(() => checkRelativePath(bad, { fromAI: true }), bad).toThrow('Windows short name')
+    }
+    expect(checkRelativePath('notes~.txt', { fromAI: true })).toBe('notes~.txt')
+    expect(checkRelativePath('backup~1.txt')).toBe('backup~1.txt')
   })
 })
 

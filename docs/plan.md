@@ -337,6 +337,28 @@ only gaps that affect correctness or this plan's requirements, not style. I fix 
 6. You have made one real project, run its setup commands, seen the starter start, and run its tests.
 7. The fresh review's correctness gaps are fixed.
 
+## Changed while building
+
+Where the build differs from the plan above, and why.
+
+- **A test also names its file.** `StarterTest` has a `file` field. The plan's "Tests" section says which files hold
+  the tests, and the plan's shape had no way to know.
+- **Continuing without starter files writes the brief again.** Decision 2 said the brief is kept. Decision 6 said a
+  brief written for a starter has no setup stage. Kept as it was, the brief would tell the learner to change a
+  starter that is not there, so "Continue without starter files" asks for a new one. "Try again" still keeps it.
+- **More is refused than decision 4 lists**, all found by the fresh review: Windows short names such as `PROJEC~1`
+  (a second spelling of the app's own folder), any path under a folder named `ASSIGNMENT.md`, a `package.json` that
+  is not plain JSON (npm reads some that `JSON.parse` cannot), the scripts `prepublish`, `preprepare` and
+  `postprepare`, and `binding.gyp`. The device names also cover the superscript digits and the console names.
+- **A project that fails partway through writing is removed.** The plan checked everything before writing and had
+  no answer for a write that fails afterwards.
+- **A link whose target is missing is blocked**, not treated as "nothing here yet".
+- **A saved `starter.json` with a line break in a command is not shown.** The plan only checked commands on the way
+  in.
+- **The test command is listed under "Getting started"**, next to the other commands, not under each stage.
+- **Names that start with a dot are refused for the AI only.** You can make `.env` with New file.
+- **New file and New folder close the open folders in the tree**, because the tree is reloaded.
+
 ## Rules while building
 
 - Build only what this plan asks for. No extra features, abstractions or config.

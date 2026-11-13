@@ -33,6 +33,8 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
   const [wantStarter, setWantStarter] = useState(true)
   const [wantTests, setWantTests] = useState(true)
   const [proposals, setProposals] = useState<Proposal[]>([])
+  /** The idea the user picked. Kept in case its brief has to be written again. */
+  const [chosen, setChosen] = useState<Proposal | null>(null)
   const [brief, setBrief] = useState<Brief | null>(null)
   /** The starter that goes with `brief`, or null when the project is made without one. */
   const [starter, setStarter] = useState<Starter | null>(null)
@@ -122,6 +124,7 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
   }
 
   const choose = async (proposal: Proposal): Promise<void> => {
+    setChosen(proposal)
     setBusy(`Writing the brief for ${proposal.title}. This can take a minute.`)
     let written: Brief
     try {
@@ -140,7 +143,24 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
     await create(written, null)
   }
 
-  const continueWithoutStarter = async (written: Brief): Promise<void> => {
+  /**
+   * The brief on hand was written for a project that has a starter: none of its stages is about setup, and its
+   * first stage changes a starter that will not be there. So it is written again for an empty folder.
+   */
+  const continueWithoutStarter = async (): Promise<void> => {
+    if (!chosen) return
+    setBusy(`Writing the brief for ${chosen.title} again, to fit a project without starter files. This can take a minute.`)
+    let written: Brief
+    try {
+      written = await window.api.ai.writeBrief(input(), chosen, false)
+    } catch (err) {
+      await fail(err)
+      return
+    } finally {
+      setBusy(null)
+    }
+    if (!alive.current) return
+    setBrief(written)
     setStarter(null)
     setStep('ready')
     await create(written, null)
@@ -285,13 +305,14 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
           <>
             <p className="np-text">
               Your brief for <strong>{brief.title}</strong> is ready, but its starter files could not be written. You can
-              try them again, or make the project with the brief alone.
+              try them again, or make the project without them. Without them, the brief is written once more so that
+              it starts from an empty folder.
             </p>
             <div className="np-actions">
               <button type="button" className="button primary" onClick={() => writeStarterFor(brief)} disabled={waiting}>
                 Try the starter files again
               </button>
-              <button type="button" className="button" onClick={() => continueWithoutStarter(brief)} disabled={waiting}>
+              <button type="button" className="button" onClick={() => continueWithoutStarter()} disabled={waiting}>
                 Continue without starter files
               </button>
               <button type="button" className="link-button" onClick={() => setStep('proposals')} disabled={waiting}>

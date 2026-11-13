@@ -5,16 +5,22 @@
  * asked for, and quietly writing somewhere else is worse than saying no.
  */
 
-/** Names Windows treats as devices, with or without an extension: "NUL.txt" is still NUL. */
-const DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i
+/**
+ * Names Windows treats as devices, with or without an extension: "NUL.txt" is still NUL. The list is Microsoft's,
+ * including the superscript digits and the two console names.
+ */
+const DEVICE = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])$/i
 
 /** Not allowed anywhere in a name. The colon also rules out drive letters ("C:x") and NTFS streams ("a:b"). */
 const FORBIDDEN = /[<>:"|?*\u0000-\u001f]/
 
 export interface PathRules {
-  /** Refuse names that start with a dot, except .gitignore. Used for files the AI wrote: dot folders are where
-   *  tools keep settings that run things later (.git, .vscode, .github). */
-  noDotNames?: boolean
+  /**
+   * For a path the AI wrote. Refuses names that start with a dot, except .gitignore: dot folders are where tools
+   * keep settings that run things later (.git, .vscode, .github), and the app keeps its own files in one. Also
+   * refuses Windows short names such as PROJEC~1, which are a second way to spell one of those folders.
+   */
+  fromAI?: boolean
 }
 
 /**
@@ -36,11 +42,13 @@ export function checkRelativePath(path: string, rules: PathRules = {}): string {
     if (segment === '.' || segment === '..') refuse('"." and ".." could point outside the project.')
     if (FORBIDDEN.test(segment)) refuse('a name cannot contain < > : " | ? * or control characters.')
     if (/^ |[. ]$/.test(segment)) refuse('a name cannot start with a space or end with a dot or a space.')
-    const base = segment.split('.')[0]
+    // Older Windows ignores spaces before the dot, so "nul .txt" is the device too.
+    const base = segment.split('.')[0].trimEnd()
     if (DEVICE.test(base)) refuse(`Windows reserves the name ${base.toUpperCase()}.`)
-    if (rules.noDotNames && segment.startsWith('.') && segment !== '.gitignore') {
+    if (rules.fromAI && segment.startsWith('.') && segment !== '.gitignore') {
       refuse('names that start with a dot are not allowed here.')
     }
+    if (rules.fromAI && /~\d/.test(segment)) refuse('it looks like a Windows short name, which can stand for another folder.')
   }
   return segments.join('/')
 }
