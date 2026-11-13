@@ -40,7 +40,14 @@ export function validateStarter(starter: Starter, brief: Brief): Starter {
     throw new Error(`The starter has ${starter.files.length} files. The limit is ${MAX_STARTER_FILES}.`)
   }
 
-  const files = starter.files.map((file) => ({ path: checkRelativePath(file.path, { noDotNames: true }), content: file.content }))
+  const files = starter.files.map((file) => {
+    try {
+      return { path: checkRelativePath(file.path, { noDotNames: true }), content: file.content }
+    } catch (err) {
+      // Say whose path this is: the user typed nothing, the AI wrote it.
+      throw new Error(`The starter was refused. ${(err as Error).message}`)
+    }
+  })
   let total = 0
   for (const file of files) {
     if (file.path.toLowerCase() === 'assignment.md') throw new Error('The starter tries to replace ASSIGNMENT.md.')

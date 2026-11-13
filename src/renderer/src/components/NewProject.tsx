@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Brief, CreatedProject, Proposal, ProposalInput } from '@shared/types'
+import type { Brief, CreatedProject, Proposal, ProposalInput, Starter } from '@shared/types'
 
 interface NewProjectProps {
   onCreated: (created: CreatedProject) => void
@@ -7,8 +7,11 @@ interface NewProjectProps {
   onError: (err: unknown) => void
 }
 
-/** key: no API key stored yet. ready: the brief is written and needs a folder. */
-type Step = 'loading' | 'key' | 'form' | 'proposals' | 'ready'
+/**
+ * key: no API key stored yet. starterFailed: the brief is written but its starter files are not.
+ * ready: everything is written and needs a folder.
+ */
+type Step = 'loading' | 'key' | 'form' | 'proposals' | 'starterFailed' | 'ready'
 
 const LEVELS: { value: ProposalInput['level']; label: string }[] = [
   { value: 'new', label: 'New to programming' },
@@ -27,8 +30,12 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
   const [level, setLevel] = useState<ProposalInput['level']>('some')
   const [language, setLanguage] = useState('')
   const [hours, setHours] = useState('8')
+  const [wantStarter, setWantStarter] = useState(true)
+  const [wantTests, setWantTests] = useState(true)
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [brief, setBrief] = useState<Brief | null>(null)
+  /** The starter that goes with `brief`, or null when the project is made without one. */
+  const [starter, setStarter] = useState<Starter | null>(null)
 
   // False once the user has left this screen. A reply from Claude that arrives after that must not do anything:
   // no error toast, and above all no folder picker opening over whatever they moved on to.
@@ -85,21 +92,40 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
     }
   }
 
-  /** Opens the folder picker and creates the project. Cancelling leaves the brief here to try again. */
-  const create = async (written: Brief): Promise<void> => {
+  /** Opens the folder picker and creates the project. Cancelling leaves everything here to try again. */
+  const create = async (written: Brief, made: Starter | null): Promise<void> => {
     try {
-      const created = await window.api.project.create(written)
+      const created = await window.api.project.create(written, made)
       if (created) onCreated(created)
     } catch (err) {
       onError(err)
     }
   }
 
+  /** Asks for the starter files that go with a brief. If that fails the brief is kept, so nothing is asked twice. */
+  const writeStarterFor = async (written: Brief): Promise<void> => {
+    setBusy('Writing the starter files. This can take a few minutes.')
+    let made: Starter
+    try {
+      made = await window.api.ai.writeStarter(input(), written, wantTests)
+    } catch (err) {
+      if (alive.current) setStep('starterFailed')
+      await fail(err)
+      return
+    } finally {
+      setBusy(null)
+    }
+    if (!alive.current) return
+    setStarter(made)
+    setStep('ready')
+    await create(written, made)
+  }
+
   const choose = async (proposal: Proposal): Promise<void> => {
     setBusy(`Writing the brief for ${proposal.title}. This can take a minute.`)
     let written: Brief
     try {
-      written = await window.api.ai.writeBrief(input(), proposal)
+      written = await window.api.ai.writeBrief(input(), proposal, wantStarter)
     } catch (err) {
       await fail(err)
       return
@@ -108,8 +134,16 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
     }
     if (!alive.current) return
     setBrief(written)
+    setStarter(null)
+    if (wantStarter) return writeStarterFor(written)
     setStep('ready')
-    await create(written)
+    await create(written, null)
+  }
+
+  const continueWithoutStarter = async (written: Brief): Promise<void> => {
+    setStarter(null)
+    setStep('ready')
+    await create(written, null)
   }
 
   const waiting = busy !== null
@@ -190,6 +224,22 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
                 required
               />
             </label>
+            <fieldset className="np-switches">
+              <legend className="field-label">What the project folder starts with</legend>
+              <label className="check">
+                <input type="checkbox" checked={wantStarter} onChange={(e) => setWantStarter(e.target.checked)} />
+                Starter files that already run
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={wantStarter && wantTests}
+                  disabled={!wantStarter}
+                  onChange={(e) => setWantTests(e.target.checked)}
+                />
+                Tests you can run and add to
+              </label>
+            </fieldset>
             <div className="np-actions">
               <button type="submit" className="button primary" disabled={waiting}>
                 Suggest three projects
@@ -231,13 +281,34 @@ export function NewProject({ onCreated, onCancel, onError }: NewProjectProps): R
           </>
         )}
 
+        {step === 'starterFailed' && brief && (
+          <>
+            <p className="np-text">
+              Your brief for <strong>{brief.title}</strong> is ready, but its starter files could not be written. You can
+              try them again, or make the project with the brief alone.
+            </p>
+            <div className="np-actions">
+              <button type="button" className="button primary" onClick={() => writeStarterFor(brief)} disabled={waiting}>
+                Try the starter files again
+              </button>
+              <button type="button" className="button" onClick={() => continueWithoutStarter(brief)} disabled={waiting}>
+                Continue without starter files
+              </button>
+              <button type="button" className="link-button" onClick={() => setStep('proposals')} disabled={waiting}>
+                Back to the ideas
+              </button>
+            </div>
+          </>
+        )}
+
         {step === 'ready' && brief && (
           <>
             <p className="np-text">
-              Your brief for <strong>{brief.title}</strong> is ready. Choose where the project folder should go.
+              Your brief for <strong>{brief.title}</strong> is ready{starter ? ', with its starter files' : ''}. Choose where
+              the project folder should go.
             </p>
             <div className="np-actions">
-              <button type="button" className="button primary" onClick={() => create(brief)}>
+              <button type="button" className="button primary" onClick={() => create(brief, starter)}>
                 Choose a folder
               </button>
               <button type="button" className="link-button" onClick={() => setStep('proposals')}>

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, GOOD_KEY, startFakeAnthropic } from './fake-anthropic'
+import { BAD_KEY, FAKE_BRIEF, FAKE_PROPOSALS, FAKE_STARTER, GOOD_KEY, STARTER_UNSAFE, startFakeAnthropic } from './fake-anthropic'
 import { closeApp, launchApp, pickFolder, shot, tempDir } from './launch'
 
 const INTERESTS = 'command-line tools I would use myself'
@@ -22,6 +22,9 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await win.getByLabel('What do you want to build or learn?').fill(INTERESTS)
   await win.getByLabel('Your experience').selectOption('new')
   await win.getByLabel('Hours you have for the whole project').fill('6')
+  // Starter files and tests are both on unless you turn them off.
+  await expect(win.getByLabel('Starter files that already run')).toBeChecked()
+  await expect(win.getByLabel('Tests you can run and add to')).toBeChecked()
   await win.screenshot({ path: shot('new-project-2-questions') })
   await win.getByRole('button', { name: 'Suggest three projects' }).click()
 
@@ -34,10 +37,14 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   await expect(win.locator('.app-project')).toHaveText('task-tracker-cli')
   await expect(win.locator('.tab.active')).toContainText('ASSIGNMENT.md')
   await expect(win.locator('.monaco-editor .view-lines')).toContainText('Tracker')
-  await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
-  // Each stage in the assignment carries its reasoning.
+  // The starter files are in the tree next to the assignment, and on disk.
+  await expect(win.locator('.tree-name')).toHaveText(['tests', '.gitignore', 'ASSIGNMENT.md', 'task.py'])
+  expect(readFileSync(join(parent, 'task-tracker-cli', 'task.py'), 'utf8')).toBe(FAKE_STARTER.files[0].content)
+  // Each stage in the assignment carries its reasoning, and the assignment says how to run the starter.
   const assignment = readFileSync(join(parent, 'task-tracker-cli', 'ASSIGNMENT.md'), 'utf8')
   expect(assignment).toContain(`**Why this stage:** ${FAKE_BRIEF.stages[0].why}`)
+  expect(assignment).toContain('## Getting started')
+  expect(assignment).toContain('## Tests')
 
   // Long lines wrap to the editor's width instead of running off to the right.
   const widestLine = await win
@@ -74,6 +81,10 @@ test('start a new project: key, questions, three ideas, pick one, land in the pr
   expect(sent).toContain(INTERESTS)
   expect(sent).toContain('new to programming')
   expect(sent).toContain('6 hours')
+  // Three requests: the ideas, the brief written for a project that has a starter, and the starter with tests.
+  expect(fake.requests).toHaveLength(3)
+  expect(fake.requests[1].body.system).toContain('starter files that already run')
+  expect(JSON.stringify(fake.requests[2].body.messages)).toContain('Tests: yes')
 
   await closeApp(app, win)
   await fake.close()
@@ -90,13 +101,19 @@ test('with a key already stored, the key step is skipped; cancelling the folder 
   await win.getByRole('button', { name: 'Start a new project' }).click()
   await expect(win.getByLabel('Claude API key')).toHaveCount(0)
   await win.getByLabel('What do you want to build or learn?').fill(INTERESTS)
+  // Starter files off. Tests need them, so that switch goes off and locks with it.
+  await win.getByLabel('Starter files that already run').uncheck()
+  await expect(win.getByLabel('Tests you can run and add to')).not.toBeChecked()
+  await expect(win.getByLabel('Tests you can run and add to')).toBeDisabled()
   await win.getByRole('button', { name: 'Suggest three projects' }).click()
   await win.locator('.proposal').nth(0).getByRole('button', { name: 'Build this one' }).click()
 
   // The picker was cancelled, so the brief waits here instead of being lost.
   await expect(win.getByRole('button', { name: 'Choose a folder' })).toBeVisible()
   await win.screenshot({ path: shot('new-project-5-choose-folder') })
+  // Two requests only: no starter was asked for, and the brief was written as for an empty folder.
   expect(fake.requests).toHaveLength(2)
+  expect(fake.requests[1].body.system).not.toContain('starter files that already run')
 
   // Choosing a folder now creates the project without asking Claude again.
   const parent = tempDir('pc-e2e-projects-')
@@ -104,6 +121,45 @@ test('with a key already stored, the key step is skipped; cancelling the folder 
   await win.getByRole('button', { name: 'Choose a folder' }).click()
   await expect(win.locator('.app-project')).toHaveText('task-tracker-cli')
   expect(fake.requests).toHaveLength(2)
+  await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
+  expect(readFileSync(join(parent, 'task-tracker-cli', 'ASSIGNMENT.md'), 'utf8')).not.toContain('Getting started')
+
+  await closeApp(app, win)
+  await fake.close()
+})
+
+test('a starter that is refused keeps the brief: try again, or continue without it', async () => {
+  const fake = await startFakeAnthropic()
+  const { app, win } = await launchApp({ env: { ANTHROPIC_BASE_URL: fake.url } })
+  await win.evaluate((key) => window.api.ai.setKey(key), GOOD_KEY)
+  const parent = tempDir('pc-e2e-projects-')
+  await pickFolder(app, parent)
+
+  await win.getByRole('button', { name: 'Start a new project' }).click()
+  // The marker makes the canned starter carry a file path that leaves the project.
+  await win.getByLabel('What do you want to build or learn?').fill(`${INTERESTS} ${STARTER_UNSAFE}`)
+  await win.getByRole('button', { name: 'Suggest three projects' }).click()
+  await win.locator('.proposal').first().getByRole('button', { name: 'Build this one' }).click()
+
+  // The reason is shown, nothing was created, and the brief is still here.
+  await expect(win.locator('.toast')).toContainText(`"../evil.py" can't be used`)
+  await expect(win.getByText('its starter files could not be written')).toBeVisible()
+  await win.screenshot({ path: shot('new-project-7-starter-refused') })
+  expect(readdirSync(parent)).toEqual([])
+  expect(fake.requests).toHaveLength(3)
+
+  // Trying again asks for the starter only. The brief is not written a second time.
+  await win.getByRole('button', { name: 'Try the starter files again' }).click()
+  await expect.poll(() => fake.requests.length).toBe(4)
+  expect(JSON.stringify(fake.requests[3].body.output_config)).toContain('testCommand')
+  await expect(win.getByRole('button', { name: 'Continue without starter files' })).toBeEnabled()
+  expect(readdirSync(parent)).toEqual([])
+
+  // Continuing makes the project from the brief alone.
+  await win.getByRole('button', { name: 'Continue without starter files' }).click()
+  await expect(win.locator('.app-project')).toHaveText('task-tracker-cli')
+  await expect(win.locator('.tree-name')).toHaveText(['ASSIGNMENT.md'])
+  expect(fake.requests).toHaveLength(4)
 
   await closeApp(app, win)
   await fake.close()
